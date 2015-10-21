@@ -1,7 +1,8 @@
 # AlternativeLevelDB
-Re-implement Level DB from scratch.
+Pure Haskell implementation of LevelDB.
 
 # Install
     cabal sandbox init
     cabal install
+
 
