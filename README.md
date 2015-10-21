@@ -1,2 +1,5 @@
-# AlternativeLevelDB
-Re-implement Level DB from scratch.
+LevelDB Haskell
+===============
+
+Pure Haskell implementation of LevelDB.
+
