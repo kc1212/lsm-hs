@@ -5,6 +5,7 @@ import System.IO
 import System.Directory
 import qualified System.FilePath as FP
 import Control.Monad
+import Control.Exception
 
 data DB = DB
     { filepath  :: FilePath
@@ -24,9 +25,12 @@ data Comparator = A | B deriving (Show) -- dummy comparator
 
 withLevelDB :: FilePath -> Options -> (DB -> IO a) -> IO a
 withLevelDB dir opts action = do
-    -- createDirectory should fail with isAlreadyExistsError if dir does not exit
-    when (errorIfExists opts) (createDirectory dir)
-    when (createIfMissing opts) (createDirectoryIfMissing False dir)
+    dirExist <- doesDirectoryExist dir
+    when (errorIfExists opts && dirExist)
+         (throwIO $ userError (dir ++ " already exists"))
+    when (createIfMissing opts)
+         (createDirectoryIfMissing False dir)
+
     manifest <- openFile (FP.combine dir "MANIFEST") ReadWriteMode
     result <- action (DB dir manifest)
     hClose manifest

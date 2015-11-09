@@ -12,7 +12,7 @@ let
         version = "0.1.0.0";
         src = ./.;
         libraryHaskellDepends = [ base directory filepath mtl ];
-        testHaskellDepends = [ base HUnit QuickCheck ];
+        testHaskellDepends = [ base directory filepath HUnit QuickCheck ];
         description = "Pure Haskell implementation of LevelDB";
         license = stdenv.lib.licenses.asl20;
       };

@@ -1,13 +1,24 @@
 
 module Main where
 
-import Test.QuickCheck
+import Test.QuickCheck (arbitrary, Property, quickCheck, (==>))
+import Test.QuickCheck.Monadic (assert, monadicIO, pick, pre, run)
+import System.Directory
+
 import Database.LevelDB
 import Database.LevelDB.Core
 
-prop_reverseReverse :: [Char] -> Bool
-prop_reverseReverse s = (reverse . reverse) s == s
+basicOptions = Options A True False False
+emptyAction db = return ""
+
+prop_createLevelDB :: Property
+prop_createLevelDB = monadicIO $ do res <- run $ withLevelDB dir basicOptions emptyAction
+                                    dirExist <- run $ doesDirectoryExist dir
+                                    assert dirExist
+                                    run $ removeDirectoryRecursive dir
+                                    where
+                                        dir = "/tmp/tmpdb"
 
 main = do
-    quickCheck prop_reverseReverse
+    quickCheck prop_createLevelDB
 

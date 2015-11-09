@@ -33,6 +33,8 @@ test-suite Tests
   hs-source-dirs:      test
   type:                exitcode-stdio-1.0
   build-depends:       base >=4.8 && <4.9
+                     , filepath
+                     , directory
                      , leveldb-hs
                      , QuickCheck
                      , HUnit
