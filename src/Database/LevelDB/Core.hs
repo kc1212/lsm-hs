@@ -2,6 +2,7 @@
 module Database.LevelDB.Core where
 
 import Control.Monad.Reader
+import System.FileLock
 
 data DB = DB
     { filepath  :: FilePath

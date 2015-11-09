@@ -4,12 +4,12 @@ let
 
   inherit (nixpkgs) pkgs;
 
-  f = { mkDerivation, base, filepath, mtl, stdenv }:
+  f = { mkDerivation, base, filelock, filepath, mtl, stdenv }:
       mkDerivation {
         pname = "leveldb-hs";
         version = "0.1.0.0";
         src = ./.;
-        libraryHaskellDepends = [ base filepath mtl ];
+        libraryHaskellDepends = [ base filelock filepath mtl ];
         description = "Pure Haskell implementation of LevelDB";
         license = stdenv.lib.licenses.asl20;
       };
