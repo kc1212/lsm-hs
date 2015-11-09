@@ -1,11 +1,15 @@
 
 module Database.LevelDB.Core where
 
-import Control.Monad.Reader
+import System.IO
+import System.Directory
+import qualified System.FilePath as FP
+import Control.Monad
 
 data DB = DB
     { filepath  :: FilePath
-    , options   :: Options
+    , manifestHandle :: Handle
+    -- and other properties
     }
 
 data Options = Options
@@ -18,8 +22,14 @@ data Options = Options
 
 data Comparator = A | B deriving (Show) -- dummy comparator
 
-open :: MonadIO m => FilePath -> Options -> m DB
-open = undefined
-
+withLevelDB :: FilePath -> Options -> (DB -> IO a) -> IO a
+withLevelDB dir opts action = do
+    -- createDirectory should fail with isAlreadyExistsError if dir does not exit
+    when (errorIfExists opts) (createDirectory dir)
+    when (createIfMissing opts) (createDirectoryIfMissing False dir)
+    manifest <- openFile (FP.combine dir "MANIFEST") ReadWriteMode
+    result <- action (DB dir manifest)
+    hClose manifest
+    return result
 
 
