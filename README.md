@@ -12,6 +12,5 @@ cabal install                   # or build/configure/repl etc
 for more information on working with Nix and Cabal see:
 http://funloop.org/post/2015-02-10-using-nix-from-arch.html
 
-
-
-
+## Literature
+* [Reviewing LevelDB](http://ayende.com/blog/161410/reviewing-leveldb-part-i-what-is-this-all-about)
