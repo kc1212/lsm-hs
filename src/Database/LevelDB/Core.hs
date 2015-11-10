@@ -1,6 +1,7 @@
 
 module Database.LevelDB.Core where
 
+import System.IO
 import Control.Monad.Reader
 import System.FileLock
 
@@ -22,5 +23,11 @@ data Comparator = A | B deriving (Show) -- dummy comparator
 open :: MonadIO m => FilePath -> Options -> m DB
 open = undefined
 
+-- lock tryLockFile "LOCK" Exclusive
+lock :: Maybe FileLock -> IO ()
+lock (Just l)  = unlockFile l
+lock Nothing = error "Database is used by another process"
 
+operation :: IO () 
+operation = putStrLn "Operation"
 
