@@ -6,6 +6,9 @@ import System.Directory
 import qualified System.FilePath as FP
 import Control.Monad
 import Control.Exception
+import qualified Data.ByteString as BS
+
+type Bs = BS.ByteString
 
 data DB = DB
     { filepath  :: FilePath
