@@ -6,17 +6,25 @@ module Database.LevelDB.MemTable where
 -- The interface should stay the same.
 import qualified Data.Map as Map
 import Database.LevelDB.Core (Bs)
+import Data.Int
 
-new :: Map.Map Bs Bs
+data ValueType = Deletion | Value deriving (Eq, Show)
+instance Ord ValueType where
+    compare Deletion Value = LT
+    compare Value Deletion = GT
+    compare _     _        = EQ
+
+type SequenceNumber = Int32
+type KeyTag = (SequenceNumber, ValueType)
+type LookupKey = (Bs, KeyTag)
+
+new :: Map.Map LookupKey Bs
 new = Map.empty
 
-insert :: Bs -> Bs -> Map.Map Bs Bs -> Map.Map Bs Bs
+insert :: LookupKey -> Bs -> Map.Map LookupKey Bs -> Map.Map LookupKey Bs
 insert = Map.insert
 
-delete :: Bs -> Map.Map Bs Bs -> Map.Map Bs Bs
-delete = Map.delete
-
-lookup :: Bs -> Map.Map Bs Bs -> Maybe Bs
+lookup :: LookupKey -> Map.Map LookupKey Bs -> Maybe Bs
 lookup = Map.lookup
 
 
