@@ -9,7 +9,7 @@ import Database.LevelDB
 import Database.LevelDB.Core
 
 basicOptions = Options A True False False
-emptyAction db = return ""
+emptyAction = return ()
 
 prop_createLevelDB :: Property
 prop_createLevelDB = monadicIO $ do res <- run $ withLevelDB dir basicOptions emptyAction

@@ -6,9 +6,10 @@ import System.Directory
 import qualified System.FilePath as FP
 import Control.Monad
 import Control.Exception
-import qualified Data.ByteString as BS
+import Control.Monad.State
 
-type Bs = BS.ByteString
+import Database.LevelDB.Utils
+import qualified Database.LevelDB.MemTable as MT
 
 data DB = DB
     { filepath  :: FilePath
@@ -26,7 +27,7 @@ data Options = Options
 
 data Comparator = A | B deriving (Show) -- dummy comparator
 
-withLevelDB :: FilePath -> Options -> (DB -> IO a) -> IO a
+withLevelDB :: FilePath -> Options -> StateT DB IO () -> IO ()
 withLevelDB dir opts action = do
     dirExist <- doesDirectoryExist dir
     when (errorIfExists opts && dirExist)
@@ -35,8 +36,16 @@ withLevelDB dir opts action = do
          (createDirectoryIfMissing False dir)
 
     manifest <- openFile (FP.combine dir "MANIFEST") ReadWriteMode
-    result <- action (DB dir manifest)
+    result <- runStateT action (DB dir manifest)
+    -- TODO check the results here?
     hClose manifest
-    return result
+
+
+get :: MT.LookupKey -> StateT DB IO (Maybe Bs)
+get = undefined
+
+
+add :: MT.LookupKey -> Bs -> StateT DB IO ()
+add = undefined
 
 
