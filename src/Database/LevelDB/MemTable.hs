@@ -8,11 +8,7 @@ import qualified Data.Map as Map
 import Database.LevelDB.Utils
 import Data.Int
 
-data ValueType = Deletion | Value deriving (Eq, Show)
-instance Ord ValueType where
-    compare Deletion Value = LT
-    compare Value Deletion = GT
-    compare _     _        = EQ
+data ValueType = Deletion | Value deriving (Eq, Show, Ord)
 
 type SequenceNumber = Int32
 type KeyTag = (SequenceNumber, ValueType)
