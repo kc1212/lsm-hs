@@ -13,4 +13,6 @@ createFileIfMissing name = doesFileExist name >>= \e -> unless e (writeFile name
 fileNameCurrent :: String
 fileNameCurrent = "CURRENT"
 
+lock :: String
+lock = "LOCK"
 

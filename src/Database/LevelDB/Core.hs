@@ -1,9 +1,6 @@
 
 module Database.LevelDB.Core where
 
-import System.IO
-import Control.Monad.Reader
-import System.FileLock
 import System.Directory
 import qualified System.FilePath as FP
 import Control.Monad
@@ -22,14 +19,12 @@ data DB = DB
     -- and other properties
     }
 
-
 data Options = Options
     { createIfMissing   :: Bool
     , errorIfExists     :: Bool
     , paranoidChecks    :: Bool
     -- add more options here
     } deriving (Show)
-
 
 withLevelDB :: FilePath -> Options -> StateT DB IO () -> IO ()
 withLevelDB dir opts action = do
@@ -47,7 +42,11 @@ withLevelDB dir opts action = do
     when (createIfMissing opts)
          (createDirectoryIfMissing False dir)
 
-    -- TODO start FileLock, create LOCK file
+    lockExist <- doesFileExist lock
+    when (lockExist) 
+         (throwIO $ userError ("Resource is busy"))
+    
+    writeFile lock ""
 
     when (createIfMissing opts)
          (createFileIfMissing (FP.combine dir fileNameCurrent))
@@ -56,16 +55,13 @@ withLevelDB dir opts action = do
 
     result <- runStateT action (DB dir memtable 1 2 3)
     -- TODO check the results
-    -- TODO unlock
+    
+    removeFile lock
+
     return ()
 
 get :: MT.LookupKey -> StateT DB IO (Maybe Bs)
 get = undefined
-
--- lock tryLockFile "LOCK" Exclusive
-lock :: Maybe FileLock -> IO ()
-lock (Just l)  = unlockFile l
-lock Nothing = error "Database is used by another process"
 
 add :: MT.LookupKey -> Bs -> StateT DB IO ()
 add = undefined
