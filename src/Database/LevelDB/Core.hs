@@ -42,11 +42,8 @@ withLevelDB dir opts action = do
     when (createIfMissing opts)
          (createDirectoryIfMissing False dir)
 
-    lockExist <- doesFileExist lock
-    when (lockExist) 
-         (throwIO $ userError ("Resource is busy"))
-    
-    writeFile lock ""
+    lockExist <- doesFileExist lockFileName
+    createFile lockFileName lockExist "Resource is busy"
 
     when (createIfMissing opts)
          (createFileIfMissing (FP.combine dir fileNameCurrent))
@@ -56,7 +53,7 @@ withLevelDB dir opts action = do
     result <- runStateT action (DB dir memtable 1 2 3)
     -- TODO check the results
     
-    removeFile lock
+    removeFile lockFileName
 
     return ()
 
@@ -65,7 +62,4 @@ get = undefined
 
 add :: MT.LookupKey -> Bs -> StateT DB IO ()
 add = undefined
-
-operation :: IO () 
-operation = putStrLn "Operation"
 
