@@ -42,8 +42,7 @@ withLevelDB dir opts action = do
     when (createIfMissing opts)
          (createDirectoryIfMissing False dir)
 
-    lockExist <- doesFileExist lockFileName
-    createFile lockFileName lockExist "Resource is busy"
+    createFile fileNameLock
 
     when (createIfMissing opts)
          (createFileIfMissing (FP.combine dir fileNameCurrent))
@@ -53,7 +52,7 @@ withLevelDB dir opts action = do
     result <- runStateT action (DB dir memtable 1 2 3)
     -- TODO check the results
     
-    removeFile lockFileName
+    removeFile fileNameLock
 
     return ()
 
