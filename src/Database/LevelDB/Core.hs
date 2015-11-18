@@ -19,14 +19,12 @@ data DB = DB
     -- and other properties
     }
 
-
 data Options = Options
     { createIfMissing   :: Bool
     , errorIfExists     :: Bool
     , paranoidChecks    :: Bool
     -- add more options here
     } deriving (Show)
-
 
 withLevelDB :: FilePath -> Options -> StateT DB IO () -> IO ()
 withLevelDB dir opts action = do
@@ -44,7 +42,7 @@ withLevelDB dir opts action = do
     when (createIfMissing opts)
          (createDirectoryIfMissing False dir)
 
-    -- TODO start FileLock, create LOCK file
+    createFile fileNameLock
 
     when (createIfMissing opts)
          (createFileIfMissing (FP.combine dir fileNameCurrent))
@@ -53,15 +51,14 @@ withLevelDB dir opts action = do
 
     result <- runStateT action (DB dir memtable 1 2 3)
     -- TODO check the results
-    -- TODO unlock
-    return ()
+    
+    removeFile fileNameLock
 
+    return ()
 
 get :: MT.LookupKey -> StateT DB IO (Maybe Bs)
 get = undefined
 
-
 add :: MT.LookupKey -> Bs -> StateT DB IO ()
 add = undefined
-
 
