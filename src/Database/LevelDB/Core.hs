@@ -16,8 +16,8 @@ newtype LevelDB a = LevelDB (ReaderT DBOptions (StateT DBState IO) a)
     deriving (Functor, Monad, MonadIO, MonadState DBState, MonadReader DBOptions)
 
 instance Applicative LevelDB where
-  pure = return
-  (<*>) = ap
+    pure = return
+    (<*>) = ap
 
 instance (Monoid a) => Monoid (LevelDB a) where
     mempty  = return mempty
@@ -65,6 +65,7 @@ withLevelDB dir opts action = do
 
     -- TODO create VersionSet and then recover (big part)
 
+    -- this is dummy state as the state is not fully implemented yet
     let st = DBState dir memtable 1 2 3
     result <- runLevelDB opts st action
 
