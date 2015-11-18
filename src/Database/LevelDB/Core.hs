@@ -1,16 +1,29 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Database.LevelDB.Core where
 
-import System.Directory
+import System.Directory (doesDirectoryExist, createDirectoryIfMissing, removeFile)
 import qualified System.FilePath as FP
 import Control.Monad
-import Control.Exception
-import Control.Monad.State
+import Control.Monad.Reader (MonadReader, ReaderT, runReaderT)
+import Control.Exception (throwIO)
+import Control.Monad.State (MonadIO, MonadState, StateT, runStateT)
 
 import Database.LevelDB.Utils
 import qualified Database.LevelDB.MemTable as MT
 
-data DB = DB
+newtype LevelDB a = LevelDB (ReaderT DBOptions (StateT DBState IO) a)
+    deriving (Functor, Monad, MonadIO, MonadState DBState, MonadReader DBOptions)
+
+instance Applicative LevelDB where
+  pure = return
+  (<*>) = ap
+
+instance (Monoid a) => Monoid (LevelDB a) where
+    mempty  = return mempty
+    mappend = liftM2 mappend
+
+data DBState = DBState
     { dbFilePath        :: FilePath
     , dbMemTable        :: MT.MemTable
     , dbTableCache      :: Int -- dummy
@@ -19,14 +32,17 @@ data DB = DB
     -- and other properties
     }
 
-data Options = Options
+data DBOptions = DBOptions
     { createIfMissing   :: Bool
     , errorIfExists     :: Bool
     , paranoidChecks    :: Bool
     -- add more options here
     } deriving (Show)
 
-withLevelDB :: FilePath -> Options -> StateT DB IO () -> IO ()
+runLevelDB :: DBOptions -> DBState -> LevelDB a -> IO (a, DBState)
+runLevelDB ops st (LevelDB a) = runStateT (runReaderT a ops) st
+
+withLevelDB :: FilePath -> DBOptions -> LevelDB a -> IO a
 withLevelDB dir opts action = do
     -- TODO check compression
     -- TODO use custom comparator
@@ -49,16 +65,17 @@ withLevelDB dir opts action = do
 
     -- TODO create VersionSet and then recover (big part)
 
-    result <- runStateT action (DB dir memtable 1 2 3)
-    -- TODO check the results
-    
+    let st = DBState dir memtable 1 2 3
+    result <- runLevelDB opts st action
+
     removeFile fileNameLock
 
-    return ()
+    return $ fst result
 
-get :: MT.LookupKey -> StateT DB IO (Maybe Bs)
+get :: MT.LookupKey -> LevelDB (Maybe Bs)
 get = undefined
 
-add :: MT.LookupKey -> Bs -> StateT DB IO ()
+add :: MT.LookupKey -> Bs -> LevelDB ()
 add = undefined
+
 

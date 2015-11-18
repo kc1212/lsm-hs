@@ -8,7 +8,7 @@ import System.Directory
 import Database.LevelDB
 import Database.LevelDB.Core
 
-basicOptions = Options True False False
+basicOptions = DBOptions True False False
 emptyAction = return ()
 
 prop_createLevelDB :: Property
