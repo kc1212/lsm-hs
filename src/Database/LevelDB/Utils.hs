@@ -2,10 +2,10 @@
 module Database.LevelDB.Utils where
 
 import qualified Data.ByteString as BS
-import Control.Monad
-import Control.Exception
-import System.Directory
-import System.IO.Error
+import Control.Monad (unless)
+import Control.Exception (throwIO)
+import System.Directory (doesFileExist)
+import System.IO.Error (alreadyExistsErrorType, mkIOError)
 
 type Bs = BS.ByteString
 
