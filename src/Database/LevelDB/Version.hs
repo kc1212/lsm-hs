@@ -1,8 +1,10 @@
 
+module Database.LevelDB.Version where
+
 import Data.Int (Int64)
 import Data.Bits (shift)
 
-type InternalKey = Int -- dummy
+import Database.LevelDB.Types
 
 data FileMetaData = FileMetaData
     { largestIKey   :: InternalKey
@@ -20,9 +22,12 @@ initFileMetaData number filesize smallest largest =
         , smallestIKey = smallest
         , fileSize = filesize
         , fileNumber = number
-        , refCout = 0
+        , refCount = 0
         , allowedSeeks = 1 `shift` 30
         }
+
+initOrRecoverVersion :: LevelDB a
+initOrRecoverVersion = undefined
 
 
 
