@@ -2,6 +2,7 @@
 module Database.LevelDB.Utils where
 
 import qualified Data.ByteString as BS
+import System.FilePath ((</>))
 import Control.Monad (unless)
 import Control.Exception (throwIO)
 import System.Directory (doesFileExist)
@@ -12,16 +13,16 @@ type Bs = BS.ByteString
 createFileIfMissing :: FilePath -> IO ()
 createFileIfMissing name = doesFileExist name >>= \e -> unless e (writeFile name "")
 
-fileNameCurrent :: String
-fileNameCurrent = "CURRENT"
+fileNameCurrent :: FilePath -> FilePath
+fileNameCurrent d = d </> "CURRENT"
 
-fileNameLock :: String
-fileNameLock = "LOCK"
+fileNameLock :: FilePath -> FilePath
+fileNameLock d = d </> "LOCK"
 
 createFile :: FilePath -> IO ()
-createFile name = do 
+createFile name = do
     exist <- doesFileExist name
-    if (exist)
-        then (throwIO $ mkIOError alreadyExistsErrorType "" Nothing (Just name))
-        else writeFile name "" 
+    if exist
+        then throwIO $ mkIOError alreadyExistsErrorType "" Nothing (Just name)
+        else writeFile name ""
 

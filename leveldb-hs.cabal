@@ -29,6 +29,7 @@ library
                      , directory
                      , containers
                      , bytestring
+                     , filelock
   hs-source-dirs:      src
   default-language:    Haskell2010
 

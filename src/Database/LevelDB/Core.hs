@@ -2,12 +2,12 @@
 
 module Database.LevelDB.Core where
 
-import System.Directory (doesDirectoryExist, createDirectoryIfMissing, removeFile)
-import qualified System.FilePath as FP
+import System.Directory (doesDirectoryExist, createDirectoryIfMissing)
+import System.FileLock (withFileLock, SharedExclusive(..))
 import Control.Monad
 import Control.Monad.Reader (MonadReader, ReaderT, runReaderT)
+import Control.Monad.State (liftIO, MonadIO, MonadState, StateT, runStateT)
 import Control.Exception (throwIO)
-import Control.Monad.State (MonadIO, MonadState, StateT, runStateT)
 
 import Database.LevelDB.Utils
 import qualified Database.LevelDB.MemTable as MT
@@ -58,20 +58,21 @@ withLevelDB dir opts action = do
     when (createIfMissing opts)
          (createDirectoryIfMissing False dir)
 
-    createFile fileNameLock
+    -- create a LOCK file and perform actions while the lock is being held
+    -- withFileLock blocks until the lock is available
+    createFileIfMissing (fileNameLock dir)
+    res <- liftIO $ withFileLock (fileNameLock dir) Exclusive
+        (\_ -> do
+            when (createIfMissing opts)
+                 (createFileIfMissing (fileNameCurrent dir))
 
-    when (createIfMissing opts)
-         (createFileIfMissing (FP.combine dir fileNameCurrent))
+            -- TODO create version and then recover/create (big part)
+            -- this is dummy state as the state is not fully implemented yet
+            let st = DBState dir memtable 1 2 3
+            runLevelDB opts st action
+        )
 
-    -- TODO create VersionSet and then recover (big part)
-
-    -- this is dummy state as the state is not fully implemented yet
-    let st = DBState dir memtable 1 2 3
-    result <- runLevelDB opts st action
-
-    removeFile fileNameLock
-
-    return $ fst result
+    return $ fst res
 
 get :: MT.LookupKey -> LevelDB (Maybe Bs)
 get = undefined
