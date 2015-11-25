@@ -28,6 +28,9 @@ initFileMetaData number filesize smallest largest =
 
 initOrRecoverVersion :: LevelDB a
 initOrRecoverVersion = undefined
+-- update the state - table cache and version
+-- perform recovery
+-- if recovery failed because CURRENT does not exist, then perform creation
 
 
 

@@ -40,10 +40,9 @@ withLevelDB dir opts action = do
             when (createIfMissing opts)
                  (createFileIfMissing (fileNameCurrent dir))
 
-            -- this is dummy state as the state is not fully implemented yet
-            let st = DBState dir memtable 1 2 3
-            runLevelDB opts st initOrRecoverVersion
-            runLevelDB opts st action
+            -- below we use a dummy state as the state is not fully implemented yet
+            runLevelDB opts (DBState dir memtable 1 2 3)
+                (initOrRecoverVersion >> action)
         )
 
     return $ fst res
