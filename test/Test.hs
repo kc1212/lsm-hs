@@ -6,7 +6,6 @@ import Test.QuickCheck.Monadic (assert, monadicIO, pick, pre, run)
 import System.Directory
 
 import Database.LevelDB
-import Database.LevelDB.Core
 
 basicOptions = DBOptions True False False
 emptyAction = return ()
