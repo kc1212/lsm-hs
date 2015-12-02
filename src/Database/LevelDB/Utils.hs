@@ -1,9 +1,11 @@
 
 module Database.LevelDB.Utils where
 
+import qualified Database.LevelDB.MemTable as MT
+
 import qualified Data.ByteString as BS
 import System.FilePath ((</>))
-import Control.Monad (unless)
+import Control.Monad (unless, liftM)
 import Control.Exception (throwIO)
 import System.Directory (doesFileExist)
 import System.IO.Error (alreadyExistsErrorType, mkIOError)
@@ -26,3 +28,11 @@ createFile name = do
         then throwIO $ mkIOError alreadyExistsErrorType "" Nothing (Just name)
         else writeFile name ""
 
+-- BTree
+
+fromMapToProducer :: MT.ImmutableTable -> Producer (BT.BLeaf Bs Bs) Identity ()
+fromMapToProducer t =
+    | null t    = return ()
+    | otherwise =
+
+fromMapToLookupTree :: MT.ImmutableTable -> LookupTree
