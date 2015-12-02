@@ -8,6 +8,7 @@ import qualified Data.Map as Map
 import Database.LevelDB.Utils
 
 type MemTable = Map.Map Bs Bs
+type ImmutableTable = MemTable
 
 new :: MemTable
 new = Map.empty
