@@ -6,28 +6,16 @@ module Database.LevelDB.MemTable where
 -- The interface should stay the same.
 import qualified Data.Map as Map
 import Database.LevelDB.Utils
-import Data.Int
 
-data ValueType = Deletion | Value deriving (Eq, Show, Ord)
-
-type SequenceNumber = Int32
-type KeyTag = (SequenceNumber, ValueType)
-type LookupKey = (Bs, KeyTag)
-type MemTable = Map.Map LookupKey Bs
+type MemTable = Map.Map Bs Bs
+type ImmutableTable = MemTable
 
 new :: MemTable
 new = Map.empty
 
-insert :: LookupKey -> Bs -> MemTable -> MemTable
+insert :: Bs -> Bs -> MemTable -> MemTable
 insert = Map.insert
 
-lookup :: LookupKey -> MemTable -> Maybe Bs
+lookup :: Bs -> MemTable -> Maybe Bs
 lookup = Map.lookup
-
--- TODO this is an inefficient way to check the memory usage
--- it will be improved when we switch to skip list
-approxMemUsage :: MemTable -> Int
-approxMemUsage = length . Map.showTree
-
-
 

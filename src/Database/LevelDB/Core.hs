@@ -47,10 +47,10 @@ withLevelDB dir opts action = do
 
     return $ fst res
 
-get :: MT.LookupKey -> LevelDB (Maybe Bs)
+get :: Bs -> LevelDB (Maybe Bs)
 get = undefined
 
-add :: MT.LookupKey -> Bs -> LevelDB ()
+add :: Bs -> Bs -> LevelDB ()
 add = undefined
 
 
