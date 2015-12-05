@@ -8,6 +8,7 @@ import Control.Exception (throwIO)
 import Control.Monad.State (liftIO, MonadIO)
 import System.Directory (doesFileExist)
 import System.IO.Error (alreadyExistsErrorType, doesNotExistErrorType, mkIOError)
+import System.Random (randomIO)
 
 type Bs = BS.ByteString
 
@@ -34,6 +35,16 @@ throwIOAlreadyExists name =
 throwIODoesNotExist :: String -> IO a
 throwIODoesNotExist name =
     throwIO $ mkIOError doesNotExistErrorType "" Nothing (Just name)
+
+throwIOFileEmpty :: String -> IO a
+throwIOFileEmpty name =
+    throwIO $ userError ("File: " ++ name ++ " is empty!")
+
+randomVersion :: IO String
+randomVersion = show <$> (randomIO :: IO Int)
+
+extension :: String
+extension = ".db"
 
 io :: MonadIO m => IO a -> m a
 io = liftIO

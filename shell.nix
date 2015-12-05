@@ -6,7 +6,7 @@ let
 
   f = { mkDerivation, b-tree, base, bytestring, containers
       , directory, filelock, filepath, HUnit, mtl, pipes, QuickCheck
-      , stdenv
+      , random, stdenv
       }:
       mkDerivation {
         pname = "lsm-hs";
@@ -14,7 +14,7 @@ let
         src = ./.;
         libraryHaskellDepends = [
           b-tree base bytestring containers directory filelock filepath mtl
-          pipes
+          pipes random
         ];
         testHaskellDepends = [ base directory filepath HUnit QuickCheck ];
         description = "Log-Structured Merge-Tree in Haskell";
