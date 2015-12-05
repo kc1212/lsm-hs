@@ -9,14 +9,13 @@ import Database.LevelDB
 
 basicOptions = DBOptions True False False
 emptyAction = return ()
+testDir = "/tmp/tmpdb"
 
 prop_createLevelDB :: Property
-prop_createLevelDB = monadicIO $ do res <- run $ withLevelDB dir basicOptions emptyAction
+prop_createLevelDB = monadicIO $ do res <- run $ withLSM dir basicOptions emptyAction
                                     dirExist <- run $ doesDirectoryExist dir
                                     assert dirExist
-                                    run $ removeDirectoryRecursive dir
-                                    where
-                                        dir = "/tmp/tmpdb"
+                                    run $ removeDirectoryRecursive testDir
 
 main = do
     quickCheck prop_createLevelDB

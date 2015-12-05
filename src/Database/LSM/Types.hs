@@ -1,38 +1,39 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Database.LevelDB.Types where
+module Database.LSM.Types where
 
 import Control.Monad
 import Control.Monad.Reader (MonadReader, ReaderT)
 import Control.Monad.State (MonadIO, MonadState, StateT)
+import qualified BTree as BT
 
-import qualified Database.LevelDB.MemTable as MT
+import qualified Database.LSM.MemTable as MT
 
-newtype LevelDB a = LevelDB (ReaderT DBOptions (StateT DBState IO) a)
+newtype LSM a = LSM (ReaderT DBOptions (StateT DBState IO) a)
     deriving (Functor, Monad, MonadIO, MonadState DBState, MonadReader DBOptions)
 
-instance Applicative LevelDB where
+instance Applicative LSM where
     pure = return
     (<*>) = ap
 
-instance (Monoid a) => Monoid (LevelDB a) where
+instance (Monoid a) => Monoid (LSM a) where
     mempty  = return mempty
     mappend = liftM2 mappend
 
 data DBState = DBState
-    { dbFilePath        :: FilePath
-    , dbMemTable        :: MT.MemTable
-    , dbTableCache      :: Int -- dummy
-    , dbLock            :: Int -- dummy
-    , dbVersionSet      :: Int -- dummy
+    { dbMemTable        :: MT.MemTable
+    , dbIMemTable       :: MT.ImmutableTable
+    , memTableSize      :: Int
+    , currentVersion    :: Int
     -- and other properties
     }
 
 data DBOptions = DBOptions
-    { createIfMissing   :: Bool
+    { dbName            :: String
+    , createIfMissing   :: Bool
     , errorIfExists     :: Bool
-    , paranoidChecks    :: Bool
-    -- add more options here
+    , bTreeOrder        :: BT.Order
+    , bTreeSize         :: BT.Size
     } deriving (Show)
 
 

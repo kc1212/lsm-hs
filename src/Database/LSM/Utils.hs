@@ -1,5 +1,5 @@
 
-module Database.LevelDB.Utils where
+module Database.LSM.Utils where
 
 import qualified Data.ByteString as BS
 import System.FilePath ((</>))
