@@ -5,8 +5,9 @@ import System.Directory (doesDirectoryExist, doesFileExist, createDirectoryIfMis
 import System.FileLock (withFileLock, SharedExclusive(..))
 import Control.Monad
 import Control.Monad.Reader (runReaderT, asks)
-import Control.Monad.State (liftIO, runStateT)
+import Control.Monad.State (runStateT, modify)
 import Control.Exception (throwIO)
+import System.FilePath ((</>))
 
 import Database.LSM.Utils
 import Database.LSM.Types
@@ -32,20 +33,26 @@ withLSM dir opts action = do
     -- create a LOCK file and perform actions while the lock is being held
     -- withFileLock blocks until the lock is available
     createFileIfMissing (fileNameLock dir)
-    res <- liftIO $ withFileLock (fileNameLock dir) Exclusive
+    res <- io $ withFileLock (fileNameLock dir) Exclusive
         (\_ -> do
             when (createIfMissing opts)
                  (createFileIfMissing (fileNameCurrent dir))
 
             -- below we use a dummy state as the state is not fully implemented yet
-            runLSM opts (DBState memTable immutableTable 0 0)
+            runLSM opts (DBState memTable immutableTable 0 "")
                 (openLSM >> action)
         )
 
     return $ fst res
 
 loadLSM :: LSM ()
-loadLSM = undefined
+loadLSM = do
+    dir <- asks dbName
+    currDB <- io $ readFile (fileNameCurrent dir)
+    dbExist <- io $ doesFileExist (dir </> currDB)
+    if dbExist
+        then modify (\s -> s {currentVersion = currDB})
+        else io $ throwIODoesNotExist currDB
 
 initLSM :: LSM ()
 initLSM = undefined
@@ -57,7 +64,7 @@ initLSM = undefined
 openLSM :: LSM ()
 openLSM = do
     dir <- asks dbName
-    currExist <- liftIO $ doesFileExist (fileNameLock dir)
+    currExist <- io $ doesFileExist (fileNameCurrent dir)
     if currExist then loadLSM else initLSM
 
 get :: Bs -> LSM (Maybe Bs)

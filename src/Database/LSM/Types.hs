@@ -24,7 +24,7 @@ data DBState = DBState
     { dbMemTable        :: MT.MemTable
     , dbIMemTable       :: MT.ImmutableTable
     , memTableSize      :: Int
-    , currentVersion    :: Int
+    , currentVersion    :: String
     -- and other properties
     }
 
