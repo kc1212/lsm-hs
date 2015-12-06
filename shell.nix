@@ -6,18 +6,18 @@ let
 
   f = { mkDerivation, b-tree, base, bytestring, containers
       , directory, filelock, filepath, HUnit, mtl, pipes, QuickCheck
-      , stdenv
+      , random, stdenv
       }:
       mkDerivation {
-        pname = "leveldb-hs";
+        pname = "lsm-hs";
         version = "0.1.0.0";
         src = ./.;
         libraryHaskellDepends = [
           b-tree base bytestring containers directory filelock filepath mtl
-          pipes
+          pipes random
         ];
         testHaskellDepends = [ base directory filepath HUnit QuickCheck ];
-        description = "Pure Haskell implementation of LevelDB";
+        description = "Log-Structured Merge-Tree in Haskell";
         license = stdenv.lib.licenses.asl20;
       };
 
