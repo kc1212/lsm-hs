@@ -2,6 +2,9 @@
 module Database.LSM.Utils where
 
 import qualified Data.ByteString as BS
+import qualified BTree as BT
+import qualified Data.Map as Map
+import Pipes
 import System.FilePath ((</>))
 import Control.Monad (unless)
 import Control.Exception (throwIO)
@@ -10,7 +13,7 @@ import System.Directory (doesFileExist)
 import System.IO.Error (alreadyExistsErrorType, doesNotExistErrorType, mkIOError)
 import System.Random (randomIO)
 
-type Bs = BS.ByteString
+import Database.LSM.Types (ImmutableTable, Bs)
 
 createFileIfMissing :: FilePath -> IO ()
 createFileIfMissing name = doesFileExist name >>= \e -> unless e (writeFile name "")
@@ -49,3 +52,5 @@ extension = ".db"
 io :: MonadIO m => IO a -> m a
 io = liftIO
 
+fromMapToProducer :: ImmutableTable -> Producer (BT.BLeaf Bs Bs) IO ()
+fromMapToProducer table = Map.foldlWithKey (\_ k v -> yield (BT.BLeaf k v)) (return ()) table
