@@ -56,7 +56,7 @@ io = liftIO
 fromMapToProducer :: ImmutableTable -> Producer (BT.BLeaf Bs Bs) IO ()
 fromMapToProducer table = Map.foldlWithKey (\_ k v -> yield (BT.BLeaf k v)) (return ()) table
 
-# TODO: What should the order and size be?
+-- TODO: What should the order and size be?
 getTreeIO :: Producer (BT.BLeaf Bs Bs) IO () -> IO (BT.LookupTree Bs Bs)
 getTreeIO producer = do
     let order = 10
