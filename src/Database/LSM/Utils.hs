@@ -75,3 +75,4 @@ merge t1 t2 = do
         Left _ -> error "Whut?"
         Right x -> x
     where fname = "/tmp/tree.tmp"
+
