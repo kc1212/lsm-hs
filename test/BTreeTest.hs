@@ -31,7 +31,9 @@ main = do
     t <- getTreeIO q
     _ <- merge s t
     lookupTree <- BT.open "/tmp/tree.tmp"
-    case lookupTree of
-        Left m -> error m
-        Right x -> x
-    return ()
+    let tree = case lookupTree of Left m -> error m
+                                  Right x -> x
+    let v = case (BT.lookup tree (BSC.pack "d") :: Maybe BSC.ByteString) of Just x -> x
+                                                                            Nothing -> error "Key not found"
+    putStrLn (show v)
+    return () 
