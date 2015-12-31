@@ -47,5 +47,8 @@ test-suite Tests
                      , lsm-hs
                      , QuickCheck
                      , HUnit
+                     , bytestring
+                     , pipes
+                     , b-tree
   default-language:    Haskell2010
 

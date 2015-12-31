@@ -16,6 +16,9 @@ import System.IO
 
 import Database.LSM.Types (ImmutableTable, Bs)
 
+-- TODO: What should the order and size be?
+bTreeOrder = 10
+
 createFileIfMissing :: FilePath -> IO ()
 createFileIfMissing name = doesFileExist name >>= \e -> unless e (writeFile name "")
 
@@ -56,22 +59,17 @@ io = liftIO
 fromMapToProducer :: ImmutableTable -> Producer (BT.BLeaf Bs Bs) IO ()
 fromMapToProducer table = Map.foldlWithKey (\_ k v -> yield (BT.BLeaf k v)) (return ()) table
 
--- TODO: What should the order and size be?
 getTreeIO :: Producer (BT.BLeaf Bs Bs) IO () -> IO (BT.LookupTree Bs Bs)
 getTreeIO producer = do
-    let order = 10
     let size = 100
-    tree <- liftM BT.fromByteString (BT.fromOrderedToByteString order size producer)
+    tree <- liftM BT.fromByteString (BT.fromOrderedToByteString bTreeOrder size producer)
     return $ case tree of
         Left m -> error m
         Right x -> x
 
-merge :: (BT.LookupTree Bs Bs) -> (BT.LookupTree Bs Bs) -> IO (BT.LookupTree Bs Bs)
-merge t1 t2 = do
-    BT.mergeTrees (\a _ -> return a) 10 fname [t1, t2]
-    eitherTree <- BT.open fname
-    return $ case eitherTree of
-        Left m -> error m
-        Right x -> x
-    where fname = "/tmp/tree.tmp"
+mapToTree :: ImmutableTable -> IO (BT.LookupTree Bs Bs)
+mapToTree = getTreeIO . fromMapToProducer
+
+merge :: FilePath -> BT.LookupTree Bs Bs -> BT.LookupTree Bs Bs -> IO ()
+merge fpath t1 t2 = BT.mergeTrees (\a _ -> return a) bTreeOrder fpath [t1, t2]
 
