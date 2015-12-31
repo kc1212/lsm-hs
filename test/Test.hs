@@ -34,8 +34,8 @@ prop_mergeBTree = monadicIO $ do
     t <- run $ mapToTree b
     run $ merge treePath s t
     mergedTree <- run $ fromRight <$> BT.open treePath
-    let res = BT.lookup mergedTree (C.pack "d")
-    assert (res == Just (C.pack "dd"))
+    let res = BT.lookup mergedTree (C.pack "c")
+    assert (res == Just (C.pack "cc"))
     run $ removeDirectoryRecursive testDir
     where
         treePath = testDir </> "tree"
