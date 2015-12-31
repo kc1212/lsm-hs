@@ -5,10 +5,8 @@ module Database.LSM.MemTable where
 -- For this project we use Data.Map, this may change later,
 -- but interface should stay the same.
 import qualified Data.Map as Map
-import Database.LSM.Utils
 
-type MemTable = Map.Map Bs Bs
-type ImmutableTable = MemTable
+import Database.LSM.Types (Bs, MemTable)
 
 new :: MemTable
 new = Map.empty
