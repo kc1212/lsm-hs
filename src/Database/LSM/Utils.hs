@@ -1,24 +1,24 @@
 
 module Database.LSM.Utils where
 
-import qualified Data.ByteString as BS
 import qualified BTree as BT
 import qualified Data.Map as Map
 import Pipes
 import System.FilePath ((</>))
 import Control.Monad (unless, liftM)
 import Control.Exception (throwIO)
-import Control.Monad.State (liftIO, MonadIO)
 import System.Directory (doesFileExist)
 import System.IO.Error (alreadyExistsErrorType, doesNotExistErrorType, mkIOError)
 import System.Random (randomIO)
-import System.IO
 
 import Database.LSM.Types (ImmutableTable, Bs)
 
 -- TODO: What should the order and size be?
 btreeOrder :: BT.Order
 btreeOrder = 10
+
+btreeSize :: BT.Size
+btreeSize = 1000
 
 createFileIfMissing :: FilePath -> IO ()
 createFileIfMissing name = doesFileExist name >>= \e -> unless e (writeFile name "")
@@ -57,20 +57,18 @@ extension = ".db"
 io :: MonadIO m => IO a -> m a
 io = liftIO
 
-fromMapToProducer :: ImmutableTable -> Producer (BT.BLeaf Bs Bs) IO ()
+fromMapToProducer :: Monad m => ImmutableTable -> Producer (BT.BLeaf Bs Bs) m ()
 fromMapToProducer table = each (map (uncurry BT.BLeaf) (Map.toAscList table))
---Map.foldlWithKey (\_ k v -> yield (BT.BLeaf k v)) (return ()) table
 
-getTreeIO :: Producer (BT.BLeaf Bs Bs) IO () -> IO (BT.LookupTree Bs Bs)
-getTreeIO producer = do
-    let size = 100
-    tree <- liftM BT.fromByteString (BT.fromOrderedToByteString btreeOrder size producer)
+getBTreeM :: Monad m => Producer (BT.BLeaf Bs Bs) m () -> m (BT.LookupTree Bs Bs)
+getBTreeM producer = do
+    tree <- liftM BT.fromByteString (BT.fromOrderedToByteString btreeOrder btreeSize producer)
     return $ case tree of
         Left m -> error m
         Right x -> x
 
-mapToTree :: ImmutableTable -> IO (BT.LookupTree Bs Bs)
-mapToTree = getTreeIO . fromMapToProducer
+mapToTree :: Monad m => ImmutableTable -> m (BT.LookupTree Bs Bs)
+mapToTree = getBTreeM . fromMapToProducer
 
 merge :: FilePath -> BT.LookupTree Bs Bs -> BT.LookupTree Bs Bs -> IO ()
 merge fpath t1 t2 = BT.mergeTrees (\a _ -> return a) btreeOrder fpath [t1, t2]
