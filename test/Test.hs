@@ -17,13 +17,22 @@ emptyAction = return ()
 testDir = "/tmp/tmpdb"
 basicOptions = DBOptions testDir True False 10 100
 
-prop_createLevelDB :: Property
-prop_createLevelDB = monadicIO $ do
+prop_createLSM :: Property
+prop_createLSM = monadicIO $ do
     res <- run $ withLSM basicOptions emptyAction
     let dir = dbName basicOptions
     dirExist <- run $ doesDirectoryExist dir
     assert dirExist
     run $ removeDirectoryRecursive testDir
+
+prop_simpleLSM :: String -> String -> Property
+prop_simpleLSM k v = monadicIO $ do
+    run $ withLSM basicOptions $ do
+            let key = C.pack k
+            let val = C.pack v
+            add key val
+            -- res <- get key
+    assert True
 
 -- TODO this is just a port of the BTreeTest.hs
 -- better to randomly generate the entries
@@ -46,6 +55,7 @@ prop_mergeBTree = monadicIO $ do
         b = MT.insert (C.pack "c") (C.pack "cc")
                 (MT.insert (C.pack "d") (C.pack "dd") MT.new)
 
+
 fromRight :: Either String b -> b
 fromRight x =
     case x of
@@ -53,6 +63,7 @@ fromRight x =
         Right m -> m
 
 main = do
-    quickCheck prop_createLevelDB
+    quickCheck prop_createLSM
+    quickCheck prop_simpleLSM
     quickCheck prop_mergeBTree
 

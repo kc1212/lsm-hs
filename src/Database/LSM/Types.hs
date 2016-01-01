@@ -5,6 +5,7 @@ module Database.LSM.Types where
 import qualified BTree as BT
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
+import Data.Int (Int64)
 import Control.Monad
 import Control.Monad.Reader (MonadReader, ReaderT)
 import Control.Monad.State (MonadIO, MonadState, StateT)
@@ -23,7 +24,7 @@ instance (Monoid a) => Monoid (LSM a) where
 data DBState = DBState
     { dbMemTable        :: MemTable
     , dbIMemTable       :: ImmutableTable
-    , memTableSize      :: Int
+    , memTableSize      :: Int64
     , currentVersion    :: String
     -- and other properties
     }

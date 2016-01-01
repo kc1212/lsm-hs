@@ -1,11 +1,14 @@
 
 module Database.LSM.Core where
 
+import qualified Data.Map as Map
+import qualified Data.ByteString as BS
+import Data.Int (Int64)
 import System.Directory (doesDirectoryExist, doesFileExist, createDirectoryIfMissing)
 import System.FileLock (withFileLock, SharedExclusive(..))
 import Control.Monad
 import Control.Monad.Reader (runReaderT, asks, ask)
-import Control.Monad.State (runStateT, modify)
+import Control.Monad.State (runStateT, modify, gets)
 import System.FilePath ((</>))
 
 import Database.LSM.Utils
@@ -68,9 +71,34 @@ openLSM = do
     if exists then loadLSM else initLSM
 
 get :: Bs -> LSM (Maybe Bs)
-get = undefined
+get k = do
+    mv1 <- Map.lookup k <$> gets dbMemTable
+    mv2 <- Map.lookup k <$> gets dbIMemTable
+    let mv3 = Nothing -- TODO read from file
+    return $ mv1 `firstJust` mv2 `firstJust` mv3
+
+firstJust :: Maybe a -> Maybe a -> Maybe a
+firstJust p q =
+    case p of
+        Just _  -> p
+        _       -> q
+
+-- TODO move threshold to reader monad
+threshold :: Int64
+threshold = 2 * 1024 * 1024
 
 add :: Bs -> Bs -> LSM ()
-add = undefined
+add k v = do
+    let entrySize = fromIntegral (BS.length k + BS.length v)
+    newSize <- fmap (entrySize +) (gets memTableSize)
+    if newSize < threshold
+    then do
+        currMemTable <- gets dbMemTable
+        modify (\s -> s
+                    { dbMemTable = Map.insert k v currMemTable
+                    , memTableSize = newSize
+                    })
+    else do
+        error "Write to BTree is unimplemented."
 
 
