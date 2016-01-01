@@ -20,7 +20,7 @@ import qualified Database.LSM.MemTable as MT
 
 -- default options
 def :: DBOptions
-def = DBOptions "mydb" True False 10 1000 twoMB
+def = DBOptions "mydb" True True 10 1000 twoMB
         where twoMB = 2 * 1024 * 1024
 
 runLSM :: DBOptions -> DBState -> LSM a -> IO (a, DBState)

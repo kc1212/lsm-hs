@@ -63,6 +63,16 @@ prop_multiEntryAndSize (Positive n) = monadicIO $ do
         assert (sz == actualSz)
     run $ removeDirectoryRecursive testDir
 
+prop_readingFromDisk :: Positive Int -> Property
+prop_readingFromDisk (Positive n) = monadicIO $ do
+    forAllM (vector n) $ \xs -> do
+        run $ withLSM basicOptions (mapM_ (uncurry add) xs)
+        res <- run $ withLSM basicOptions { createIfMissing = False
+                                          , errorIfExists = False }
+                             (mapM (get . fst) xs)
+        assert (all isJust res)
+    run $ removeDirectoryRecursive testDir
+
 prop_mergeBTree :: [(Bs,Bs)] -> [(Bs,Bs)] -> [Bs] -> Property
 prop_mergeBTree xs ys zs = monadicIO $ do
     run $ createDirectoryIfMissing False testDir
@@ -85,11 +95,11 @@ prop_mergeBTree xs ys zs = monadicIO $ do
         -- TODO refactor to use generator rather than filtering
         badKeys = filter (\x -> notElem x keys && (not . B.null) x) zs
 
-
 main = do
     quickCheck prop_mergeBTree
     quickCheck prop_createLSM
     quickCheck prop_singleEntry
     quickCheck prop_multiEntryAndSize
+    quickCheck prop_readingFromDisk
     -- quickCheck (prop_multiEntryAndSize (Positive 100))
 
