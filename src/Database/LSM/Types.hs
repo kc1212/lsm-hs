@@ -29,6 +29,7 @@ data DBState = DBState
     , memTableSize      :: Int64
     , dbFileLock        :: Maybe FileLock -- TODO Maybe is not nice...
     , dbMVar            :: MVar String
+    , dbAsyncRunning    :: Bool
     -- and other properties
     }
 

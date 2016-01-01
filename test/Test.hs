@@ -87,7 +87,7 @@ prop_mergeBTree xs ys zs = monadicIO $ do
 main = do
     quickCheck prop_mergeBTree
     quickCheck prop_createLSM
-    quickCheck prop_singleEntry
+    verboseCheck prop_singleEntry
     quickCheck prop_multiEntryAndSize
     -- quickCheck (prop_multiEntryAndSize (Positive 100))
 

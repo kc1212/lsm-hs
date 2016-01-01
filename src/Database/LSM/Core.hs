@@ -29,7 +29,7 @@ runLSM ops st (LSM a) = runStateT (runReaderT a ops) st
 withLSM :: DBOptions -> LSM a -> IO a
 withLSM opts action = do
     mvar <- newEmptyMVar
-    let st = DBState MT.new MT.new 0 Nothing mvar
+    let st = DBState MT.new MT.new 0 Nothing mvar False
     res <- runLSM opts st (openLSM >> action >>= closeLSM)
     return $ fst res
 
@@ -41,10 +41,12 @@ loadLSM = do
 
 initLSM :: LSM ()
 initLSM = do
+    io $ logStdErr "Initialising LSM."
     opts <- ask
     let dir = dbName opts
     let currentFile = fileNameCurrent dir
     version <- io randomVersion
+    io $ logStdErr ("Initial version is: " ++ version)
     io $ BT.fromOrderedToFile
             (btreeOrder opts)
             (btreeSize opts)
@@ -52,10 +54,12 @@ initLSM = do
             (mapToProducer MT.new)
     io $ createFile currentFile
     io $ writeFile currentFile version
+    io $ logStdErr "Initialisation completd."
     -- TODO write checksum of db
 
 openLSM :: LSM ()
 openLSM = do
+    io $ logStdErr "Opening LSM."
     opts <- ask
     let dir = dbName opts
 
@@ -73,18 +77,18 @@ openLSM = do
 
     currExists <- io $ doesFileExist (fileNameCurrent dir)
     if currExists then loadLSM else initLSM
+    io $ logStdErr "Opening Completed."
 
 closeLSM :: a -> LSM a
 closeLSM a = do
-    -- the lock must be present
-    flock <- fromJust <$> gets dbFileLock
+    syncToDisk                              -- sync memtable with btree
+    flock <- fromJust <$> gets dbFileLock   -- the lock must be present
     io $ unlockFile flock
     return a
-    -- TODO sync memtable with btree
 
 get :: Bs -> LSM (Maybe Bs)
 get k = do
-    checkAsync
+    updateVersionNoBlock
     mv1 <- Map.lookup k <$> gets dbMemTable
     mv2 <- Map.lookup k <$> gets dbIMemTable
     mv3 <- nameAndVersion
@@ -94,7 +98,7 @@ get k = do
 
 add :: Bs -> Bs -> LSM ()
 add k v = do
-    checkAsync
+    updateVersionNoBlock
     let entrySize = fromIntegral (BS.length k + BS.length v)
     newSize <- fmap (entrySize +) (gets memTableSize)
 
@@ -106,6 +110,7 @@ add k v = do
 
     threshold <- asks memtableThreshold
     when (newSize > threshold) $ do
+        io $ logStdErr ("Threshold reached (" ++ show newSize ++ " > " ++ show threshold ++ ").")
         oldMemTable <- gets dbMemTable
         modify (\s -> s { dbIMemTable = oldMemTable
                         , dbMemTable = MT.new
@@ -117,6 +122,7 @@ add k v = do
         newVer <- io randomVersion
         tree <- gets dbIMemTable >>= io . mapToTree order size
         mvar <- gets dbMVar
+        modify (\s -> s { dbAsyncRunning = True })
         _ <- io $ forkIO (mergeToDisk order name oldVer newVer tree >>= putMVar mvar)
         return ()
 
@@ -125,16 +131,41 @@ mergeToDisk order path oldVer newVer newTree = do
     let oldPath = path </> oldVer
     let newPath = path </> newVer
     oldTree <- openTree oldPath
+    io $ logStdErr ("Merging started, from " ++ oldPath ++ " to " ++ newPath ++ ".")
     merge order newPath oldTree newTree
+    io $ logStdErr "Merging finished."
     return newVer
 
--- if async action finished, update the verion
-checkAsync :: LSM ()
-checkAsync = do
+updateVersionNoBlock :: LSM ()
+updateVersionNoBlock = do
     mvar <- gets dbMVar
-    mvarExist <- io $ isEmptyMVar mvar
-    unless mvarExist $ do
-        ver <- io $ takeMVar mvar
-        writeVersion ver
+    res <- io $ tryTakeMVar mvar
+    case res of
+        Nothing -> return ()
+        Just v  -> writeVersion v >> modify (\s -> s { dbAsyncRunning = True })
+
+updateVersionBlock :: LSM ()
+updateVersionBlock = do
+    running <- gets dbAsyncRunning
+    when running $ do
+        mvar <- gets dbMVar
+        v <- io $ takeMVar mvar
+        writeVersion v
+
+syncToDisk :: LSM ()
+syncToDisk = do
+    updateVersionBlock
+    -- immutable table should be redundant after version update
+    order <- asks btreeOrder
+    size <- asks btreeSize
+    name <- asks dbName
+    oldVer <- readVersion
+    newVer <- io randomVersion
+    io $ logStdErr ("Syncthing to disk, new version: " ++ newVer)
+    tree <- gets dbMemTable >>= io . mapToTree order size
+    -- ver <- io $ mergeToDisk order name oldVer newVer tree
+    let ver = newVer
+    -- TODO not working...
+    writeVersion ver
 
 

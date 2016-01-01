@@ -5,6 +5,7 @@ import qualified BTree as BT
 import qualified Data.Map as Map
 import Pipes
 import System.FilePath ((</>))
+import System.IO (stderr, hPutStrLn)
 import Control.Monad (unless, liftM)
 import Control.Monad.Reader (asks)
 import Control.Monad.State (gets)
@@ -48,8 +49,8 @@ throwIOBadBTree string =
     throwIO $ userError ("Cannot open btree: " ++ string)
 
 randomVersion :: IO String
-randomVersion = (++ extension) . show <$> (randomIO :: IO Int)
-    where extension = ".db"
+randomVersion = tail . (++ extension) . show <$> (randomIO :: IO Int)
+    where extension = "lsm.db"
 
 readVersion :: LSM String
 readVersion = do
@@ -58,11 +59,13 @@ readVersion = do
 
 writeVersion :: String -> LSM ()
 writeVersion ver = do
+    io $ logStdErr ("Writing version " ++ ver ++ ".")
     fpath <- fileNameCurrent <$> asks dbName
     currExists <- io $ doesFileExist fpath
     io $ if currExists
             then writeFile fpath ver
             else throwIOAlreadyExists fpath
+    io $ logStdErr "Writing version finished."
 
 nameAndVersion :: LSM FilePath
 nameAndVersion = do
@@ -78,6 +81,9 @@ firstJust p q =
     case p of
         Just _  -> p
         _       -> q
+
+logStdErr :: String -> IO ()
+logStdErr = hPutStrLn stderr
 
 openTree :: FilePath -> IO (BT.LookupTree Bs Bs)
 openTree fpath = do
