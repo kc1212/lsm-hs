@@ -3,7 +3,7 @@
 module Database.LSM.Types where
 
 import qualified BTree as BT
-import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BS
 import qualified Data.Map as Map
 import Data.Int (Int64)
 import Control.Monad
@@ -46,3 +46,4 @@ type ImmutableTable = MemTable
 type InternalKey = Int -- dummy
 
 type Bs = BS.ByteString
+

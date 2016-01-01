@@ -2,7 +2,7 @@
 module Database.LSM.Core where
 
 import qualified Data.Map as Map
-import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BS
 import qualified BTree as BT
 import Data.Maybe (fromJust)
 import System.Directory (doesDirectoryExist, doesFileExist, createDirectoryIfMissing)
