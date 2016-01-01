@@ -2,12 +2,12 @@
 module Main where
 
 import Control.Monad.State (gets)
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, isNothing)
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
+import Test.QuickCheck.Modifiers ( NonEmptyList(..) )
 import System.Directory
 import System.FilePath ((</>))
-import qualified Data.ByteString.Lazy.Char8 as C
 import qualified Data.ByteString.Lazy as B
 import qualified BTree as BT
 
@@ -35,15 +35,20 @@ prop_createLSM = monadicIO $ do
     assert dirExist
     run $ removeDirectoryRecursive testDir
 
-prop_singleEntry :: (Bs, Bs) -> Property
-prop_singleEntry (k, v) = monadicIO $ do
+prop_singleEntry :: (Bs, Bs) -> Bs -> Property
+prop_singleEntry (k, v) k2 = monadicIO $ do
+    -- TODO refactor to use generator rather than if/else
+    -- forAllM (\(Gen (k, v) k2) -> k2 /= k) $ \(k, v) k2 ->
     res <- run $ withLSM basicOptions $ do
             add k v
             r1 <- get k
-            r2 <- C.pack <$> io randomVersion >>= get
+            r2 <- if k2 == k || B.null k2
+                    then return Nothing
+                    else get k2
             return (r1, r2)
     assert (res == (Just v, Nothing))
 
+-- prop_multiEntryOneByOne
 prop_multiEntryAndSize :: Positive Int -> Property
 prop_multiEntryAndSize (Positive n) = monadicIO $
     forAllM (vector n) $ \xs -> do
@@ -56,28 +61,27 @@ prop_multiEntryAndSize (Positive n) = monadicIO $
         assert (all isJust res)
         assert (sz == actualSz)
 
--- TODO this is just a port of the BTreeTest.hs
--- better to randomly generate the entries
-prop_mergeBTree :: Property
-prop_mergeBTree = monadicIO $ do
+prop_mergeBTree :: [(Bs,Bs)] -> [(Bs,Bs)] -> [Bs] -> Property
+prop_mergeBTree xs ys zs = monadicIO $ do
     run $ createDirectoryIfMissing False testDir
-    s <- run $ mapToTree order size a
-    t <- run $ mapToTree order size b
-    run $ merge order treePath s t
+    xt <- run $ mapToTree order size xm
+    yt <- run $ mapToTree order size ym
+    run $ merge order treePath xt yt
     mergedTree <- run $ fromRight <$> BT.open treePath
-    let res = BT.lookup mergedTree (C.pack "c")
-    assert (res == Just (C.pack "cc"))
+    let res = map (BT.lookup mergedTree) keys :: [Maybe Bs]
+    let res2 = map (BT.lookup mergedTree) badKeys :: [Maybe Bs]
+    assert (all isJust res)
+    assert (all isNothing res2)
     run $ removeDirectoryRecursive testDir
     where
         order = 10
         size = 100
         treePath = testDir </> "tree"
-        a :: MemTable
-        a = MT.insert (C.pack "b") (C.pack "bb")
-                (MT.insert (C.pack "a") (C.pack "aa") MT.new)
-        b :: MemTable
-        b = MT.insert (C.pack "c") (C.pack "cc")
-                (MT.insert (C.pack "d") (C.pack "dd") MT.new)
+        xm = foldr (uncurry MT.insert) MT.new xs :: ImmutableTable
+        ym = foldr (uncurry MT.insert) MT.new ys :: ImmutableTable
+        keys = map fst (xs ++ ys)
+        -- TODO refactor to use generator rather than filtering
+        badKeys = filter (\x -> notElem x keys && (not . B.null) x) zs
 
 
 main = do
