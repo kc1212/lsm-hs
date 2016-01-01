@@ -56,7 +56,7 @@ initLSM = do
             (mapToProducer MT.new)
     io $ createFile currentFile
     writeVersion version
-    io $ logStdErr "Initialisation completd."
+    io $ logStdErr "Initialisation completed."
     -- TODO write checksum of db
 
 openLSM :: LSM ()
@@ -111,6 +111,7 @@ add k v = do
 
     threshold <- asks memtableThreshold
     when (newSize > threshold) $ do
+        syncToDisk -- wait for async process to finish before starting a new one
         io $ logStdErr ("Threshold reached (" ++ show newSize ++ " > " ++ show threshold ++ ").")
         oldMemTable <- gets dbMemTable
         modify (\s -> s { dbIMemTable = oldMemTable
@@ -139,6 +140,7 @@ mergeToDisk order path oldVer newVer newTree = do
 
 updateVersionNoBlock :: LSM ()
 updateVersionNoBlock = do
+    io $ logStdErr "Updating version - non blocking."
     mvar <- gets dbMVar
     res <- io $ tryTakeMVar mvar
     case res of
@@ -147,14 +149,17 @@ updateVersionNoBlock = do
 
 updateVersionBlock :: LSM ()
 updateVersionBlock = do
+    io $ logStdErr "Updating version - blocking."
     running <- gets dbAsyncRunning
     when running $ do
         mvar <- gets dbMVar
-        v <- io $ takeMVar mvar
+        v <- io $ takeMVar mvar -- blocks
         writeVersion v
+        modify (\s -> s { dbAsyncRunning = False })
 
 syncToDisk :: LSM ()
 syncToDisk = do
+    io $ logStdErr "Syncthing to disk."
     updateVersionBlock
     -- immutable table should be redundant after version update
     order <- asks btreeOrder

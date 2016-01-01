@@ -8,7 +8,6 @@ import System.FilePath ((</>))
 import System.IO (stderr, hPutStrLn)
 import Control.Monad (unless, liftM)
 import Control.Monad.Reader (asks)
-import Control.Monad.State (gets)
 import Control.Exception (throwIO)
 import System.Directory (doesFileExist, renameFile)
 import System.IO.Error (alreadyExistsErrorType, doesNotExistErrorType, mkIOError)
@@ -69,7 +68,7 @@ writeVersion ver = do
     io $ renameFile currPath (currPath ++ ".old")
     io $ writeFile currPath ver
 
-    content <- io $ readFile currPath
+    content <- io $ readFile currPath -- hack to do strict IO
     io $ logStdErr ("Writing version finished: " ++ content ++ ".")
 
 nameAndVersion :: LSM FilePath
