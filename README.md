@@ -26,8 +26,8 @@ stack build
 # to try the library
 stack repl
 
-# to run tests
-stack test
+# to run the tests
+stack test 2> lsm.log
 ```
 
 ## Example Usage

@@ -47,10 +47,11 @@ prop_singleEntry (k, v) k2 = monadicIO $ do
                     else get k2
             return (r1, r2)
     assert (res == (Just v, Nothing))
+    run $ removeDirectoryRecursive testDir
 
 -- prop_multiEntryOneByOne
 prop_multiEntryAndSize :: Positive Int -> Property
-prop_multiEntryAndSize (Positive n) = monadicIO $
+prop_multiEntryAndSize (Positive n) = monadicIO $ do
     forAllM (vector n) $ \xs -> do
         (res, sz) <- run $ withLSM basicOptions $ do
                 mapM_ (uncurry add) xs
@@ -60,6 +61,7 @@ prop_multiEntryAndSize (Positive n) = monadicIO $
         let actualSz = sum (map (\(k, v) -> B.length k + B.length v) xs)
         assert (all isJust res)
         assert (sz == actualSz)
+    run $ removeDirectoryRecursive testDir
 
 prop_mergeBTree :: [(Bs,Bs)] -> [(Bs,Bs)] -> [Bs] -> Property
 prop_mergeBTree xs ys zs = monadicIO $ do
@@ -87,7 +89,7 @@ prop_mergeBTree xs ys zs = monadicIO $ do
 main = do
     quickCheck prop_mergeBTree
     quickCheck prop_createLSM
-    verboseCheck prop_singleEntry
+    quickCheck prop_singleEntry
     quickCheck prop_multiEntryAndSize
     -- quickCheck (prop_multiEntryAndSize (Positive 100))
 

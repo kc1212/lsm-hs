@@ -10,7 +10,7 @@ import Control.Monad (unless, liftM)
 import Control.Monad.Reader (asks)
 import Control.Monad.State (gets)
 import Control.Exception (throwIO)
-import System.Directory (doesFileExist)
+import System.Directory (doesFileExist, renameFile)
 import System.IO.Error (alreadyExistsErrorType, doesNotExistErrorType, mkIOError)
 import System.Random (randomIO)
 
@@ -59,13 +59,18 @@ readVersion = do
 
 writeVersion :: String -> LSM ()
 writeVersion ver = do
-    io $ logStdErr ("Writing version " ++ ver ++ ".")
-    fpath <- fileNameCurrent <$> asks dbName
-    currExists <- io $ doesFileExist fpath
-    io $ if currExists
-            then writeFile fpath ver
-            else throwIOAlreadyExists fpath
-    io $ logStdErr "Writing version finished."
+    io $ logStdErr ("Writing version: " ++ ver ++ ".")
+    currPath <- fileNameCurrent <$> asks dbName
+    currExists <- io $ doesFileExist currPath
+
+    -- throw exception if CURRENT does not exist
+    io $ unless currExists (throwIODoesNotExist currPath)
+
+    io $ renameFile currPath (currPath ++ ".old")
+    io $ writeFile currPath ver
+
+    content <- io $ readFile currPath
+    io $ logStdErr ("Writing version finished: " ++ content ++ ".")
 
 nameAndVersion :: LSM FilePath
 nameAndVersion = do

@@ -37,7 +37,9 @@ loadLSM :: LSM ()
 loadLSM = do
     currentFile <- fileNameCurrent <$> asks dbName
     version <- io $ readFile currentFile
+    io $ logStdErr ("Loading existing LSM, version: " ++  version ++ ".")
     when (null version) (io $ throwIOFileEmpty (currentFile </> version))
+    io $ logStdErr "Loading Completed."
 
 initLSM :: LSM ()
 initLSM = do
@@ -53,13 +55,12 @@ initLSM = do
             (dir </> version)
             (mapToProducer MT.new)
     io $ createFile currentFile
-    io $ writeFile currentFile version
+    writeVersion version
     io $ logStdErr "Initialisation completd."
     -- TODO write checksum of db
 
 openLSM :: LSM ()
 openLSM = do
-    io $ logStdErr "Opening LSM."
     opts <- ask
     let dir = dbName opts
 
@@ -77,10 +78,10 @@ openLSM = do
 
     currExists <- io $ doesFileExist (fileNameCurrent dir)
     if currExists then loadLSM else initLSM
-    io $ logStdErr "Opening Completed."
 
 closeLSM :: a -> LSM a
 closeLSM a = do
+    io $ logStdErr "Closing LSM."
     syncToDisk                              -- sync memtable with btree
     flock <- fromJust <$> gets dbFileLock   -- the lock must be present
     io $ unlockFile flock
@@ -163,9 +164,7 @@ syncToDisk = do
     newVer <- io randomVersion
     io $ logStdErr ("Syncthing to disk, new version: " ++ newVer)
     tree <- gets dbMemTable >>= io . mapToTree order size
-    -- ver <- io $ mergeToDisk order name oldVer newVer tree
-    let ver = newVer
-    -- TODO not working...
+    ver <- io $ mergeToDisk order name oldVer newVer tree
     writeVersion ver
 
 

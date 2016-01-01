@@ -15,4 +15,4 @@ cabal.sandbox.config
 *.hp
 .stack-work/
 codex.tags
-
+*.log
