@@ -19,6 +19,17 @@ cabal install
 for more information on working with Nix and Cabal see:
 http://funloop.org/post/2015-02-10-using-nix-from-arch.html
 
+## Building and Installing Using Stack
+```
+stack build
+
+# to try the library
+stack repl
+
+# to run tests
+stack test
+```
+
 ## Example Usage
 ```
 withLevelDB "/tmp/testdb" options (
