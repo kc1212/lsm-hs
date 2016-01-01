@@ -1,14 +1,15 @@
 
 module Main where
 
-import Test.QuickCheck (arbitrary, coarbitrary, Arbitrary, CoArbitrary, Property, quickCheck)
-import Test.QuickCheck.Monadic (assert, monadicIO, monadic, pick, pre, run)
+import Control.Monad.State (gets)
+import Data.Maybe (isJust)
+import Test.QuickCheck
+import Test.QuickCheck.Monadic
 import System.Directory
 import System.FilePath ((</>))
 import qualified Data.ByteString.Lazy.Char8 as C
 import qualified Data.ByteString.Lazy as B
 import qualified BTree as BT
-import Pipes
 
 import Database.LSM
 import Database.LSM.Utils
@@ -17,6 +18,7 @@ import Database.LSM.Types
 
 instance Arbitrary B.ByteString where
     arbitrary = B.pack <$> arbitrary
+    shrink xs = B.pack <$> shrink (B.unpack xs)
 
 instance CoArbitrary B.ByteString where
     coarbitrary = coarbitrary . B.unpack
@@ -37,8 +39,22 @@ prop_singleEntry :: (Bs, Bs) -> Property
 prop_singleEntry (k, v) = monadicIO $ do
     res <- run $ withLSM basicOptions $ do
             add k v
-            get k
-    assert (res == Just v)
+            r1 <- get k
+            r2 <- C.pack <$> io randomVersion >>= get
+            return (r1, r2)
+    assert (res == (Just v, Nothing))
+
+prop_multiEntryAndSize :: Positive Int -> Property
+prop_multiEntryAndSize (Positive n) = monadicIO $
+    forAllM (vector n) $ \xs -> do
+        (res, sz) <- run $ withLSM basicOptions $ do
+                mapM_ (uncurry add) xs
+                res <- mapM (get . fst) xs
+                sz <- gets memTableSize
+                return (res, sz)
+        let actualSz = sum (map (\(k, v) -> B.length k + B.length v) xs)
+        assert (all isJust res)
+        assert (sz == actualSz)
 
 -- TODO this is just a port of the BTreeTest.hs
 -- better to randomly generate the entries
@@ -65,7 +81,9 @@ prop_mergeBTree = monadicIO $ do
 
 
 main = do
+    quickCheck prop_mergeBTree
     quickCheck prop_createLSM
     quickCheck prop_singleEntry
-    quickCheck prop_mergeBTree
+    quickCheck prop_multiEntryAndSize
+    -- quickCheck (prop_multiEntryAndSize (Positive 100))
 
