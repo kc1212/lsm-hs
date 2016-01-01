@@ -43,27 +43,48 @@ throwIOFileEmpty :: String -> IO a
 throwIOFileEmpty name =
     throwIO $ userError ("File: " ++ name ++ " is empty!")
 
+throwIOBadBTree :: String -> IO a
+throwIOBadBTree string =
+    throwIO $ userError ("Cannot open btree: " ++ string)
+
 randomVersion :: IO String
-randomVersion = show <$> (randomIO :: IO Int)
+randomVersion = (++ extension) . show <$> (randomIO :: IO Int)
+    where extension = ".db"
+
+readVersion :: LSM String
+readVersion = do
+    path <- asks dbName
+    io $ readFile (fileNameCurrent path)
+
+writeVersion :: String -> LSM ()
+writeVersion ver = do
+    fpath <- fileNameCurrent <$> asks dbName
+    currExists <- io $ doesFileExist fpath
+    io $ if currExists
+            then writeFile fpath ver
+            else throwIOAlreadyExists fpath
 
 nameAndVersion :: LSM FilePath
 nameAndVersion = do
     path <- asks dbName
-    version <- gets currentVersion
+    version <- readVersion
     return (path </> version)
-
-extension :: String
-extension = ".db"
 
 io :: MonadIO m => IO a -> m a
 io = liftIO
 
--- only use this function when the error cannot be recovered
-fromRight :: Either String b -> b
-fromRight x =
-    case x of
-        Left m -> error m
-        Right m -> m
+firstJust :: Maybe a -> Maybe a -> Maybe a
+firstJust p q =
+    case p of
+        Just _  -> p
+        _       -> q
+
+openTree :: FilePath -> IO (BT.LookupTree Bs Bs)
+openTree fpath = do
+    eTree <- BT.open fpath
+    case eTree of
+        Left m  -> throwIOBadBTree m
+        Right t -> return t
 
 mapToProducer :: Monad m => ImmutableTable -> Producer (BT.BLeaf Bs Bs) m ()
 mapToProducer table = each (map (uncurry BT.BLeaf) (Map.toAscList table))

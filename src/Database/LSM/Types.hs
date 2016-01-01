@@ -6,6 +6,7 @@ import qualified BTree as BT
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.Map as Map
 import Data.Int (Int64)
+import Control.Concurrent.MVar (MVar)
 import Control.Monad
 import Control.Monad.Reader (MonadReader, ReaderT)
 import Control.Monad.State (MonadIO, MonadState, StateT)
@@ -26,8 +27,8 @@ data DBState = DBState
     { dbMemTable        :: MemTable
     , dbIMemTable       :: ImmutableTable
     , memTableSize      :: Int64
-    , currentVersion    :: String
-    , dbFileLock        :: Maybe FileLock
+    , dbFileLock        :: Maybe FileLock -- TODO Maybe is not nice...
+    , dbMVar            :: MVar String
     -- and other properties
     }
 

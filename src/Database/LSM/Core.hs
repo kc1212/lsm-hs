@@ -7,6 +7,8 @@ import qualified BTree as BT
 import Data.Maybe (fromJust)
 import System.Directory (doesDirectoryExist, doesFileExist, createDirectoryIfMissing)
 import System.FileLock (lockFile, unlockFile, SharedExclusive(..))
+import Control.Concurrent (forkIO)
+import Control.Concurrent.MVar
 import Control.Monad
 import Control.Monad.Reader (runReaderT, asks, ask)
 import Control.Monad.State (runStateT, modify, gets)
@@ -21,32 +23,28 @@ def :: DBOptions
 def = DBOptions "mydb" True False 10 1000 twoMB
         where twoMB = 2 * 1024 * 1024
 
--- default state
-defState :: DBState
-defState = DBState MT.new MT.new 0 "0" Nothing
-
 runLSM :: DBOptions -> DBState -> LSM a -> IO (a, DBState)
 runLSM ops st (LSM a) = runStateT (runReaderT a ops) st
 
 withLSM :: DBOptions -> LSM a -> IO a
 withLSM opts action = do
-    res <- runLSM opts defState (openLSM >> action >>= closeLSM)
+    mvar <- newEmptyMVar
+    let st = DBState MT.new MT.new 0 Nothing mvar
+    res <- runLSM opts st (openLSM >> action >>= closeLSM)
     return $ fst res
 
 loadLSM :: LSM ()
 loadLSM = do
     currentFile <- fileNameCurrent <$> asks dbName
     version <- io $ readFile currentFile
-    if null version
-        then io $ throwIOFileEmpty (currentFile </> version)
-        else modify (\s -> s {currentVersion = version})
+    when (null version) (io $ throwIOFileEmpty (currentFile </> version))
 
 initLSM :: LSM ()
 initLSM = do
     opts <- ask
     let dir = dbName opts
-    version <- io $ (++ extension) <$> randomVersion
     let currentFile = fileNameCurrent dir
+    version <- io randomVersion
     io $ BT.fromOrderedToFile
             (btreeOrder opts)
             (btreeSize opts)
@@ -54,7 +52,6 @@ initLSM = do
             (mapToProducer MT.new)
     io $ createFile currentFile
     io $ writeFile currentFile version
-    modify (\s -> s {currentVersion = version})
     -- TODO write checksum of db
 
 openLSM :: LSM ()
@@ -87,32 +84,57 @@ closeLSM a = do
 
 get :: Bs -> LSM (Maybe Bs)
 get k = do
-    -- this should be evaluated lazily right?
+    checkAsync
     mv1 <- Map.lookup k <$> gets dbMemTable
     mv2 <- Map.lookup k <$> gets dbIMemTable
-    mv3 <- nameAndVersion >>= io . BT.open
-            >>= (\t -> return $ BT.lookup (fromRight t) k)
+    mv3 <- nameAndVersion
+            >>= io . openTree
+            >>= (\t -> return $ BT.lookup t k)
     return $ mv1 `firstJust` mv2 `firstJust` mv3
-
-firstJust :: Maybe a -> Maybe a -> Maybe a
-firstJust p q =
-    case p of
-        Just _  -> p
-        _       -> q
 
 add :: Bs -> Bs -> LSM ()
 add k v = do
+    checkAsync
     let entrySize = fromIntegral (BS.length k + BS.length v)
-    threshold <- asks memtableThreshold
     newSize <- fmap (entrySize +) (gets memTableSize)
-    if newSize < threshold
-    then do
-        currMemTable <- gets dbMemTable
-        modify (\s -> s
-                    { dbMemTable = Map.insert k v currMemTable
-                    , memTableSize = newSize
-                    })
-    else do
-        error "Write to BTree is unimplemented."
+
+    currMemTable <- gets dbMemTable
+    modify (\s -> s
+                { dbMemTable = Map.insert k v currMemTable
+                , memTableSize = newSize
+                })
+
+    threshold <- asks memtableThreshold
+    when (newSize > threshold) $ do
+        oldMemTable <- gets dbMemTable
+        modify (\s -> s { dbIMemTable = oldMemTable
+                        , dbMemTable = MT.new
+                        , memTableSize = 0 })
+        order <- asks btreeOrder
+        size <- asks btreeSize
+        name <- asks dbName
+        oldVer <- readVersion
+        newVer <- io randomVersion
+        tree <- gets dbIMemTable >>= io . mapToTree order size
+        mvar <- gets dbMVar
+        _ <- io $ forkIO (mergeToDisk order name oldVer newVer tree >>= putMVar mvar)
+        return ()
+
+mergeToDisk :: BT.Order -> FilePath -> String -> String -> BT.LookupTree Bs Bs -> IO String
+mergeToDisk order path oldVer newVer newTree = do
+    let oldPath = path </> oldVer
+    let newPath = path </> newVer
+    oldTree <- openTree oldPath
+    merge order newPath oldTree newTree
+    return newVer
+
+-- if async action finished, update the verion
+checkAsync :: LSM ()
+checkAsync = do
+    mvar <- gets dbMVar
+    mvarExist <- io $ isEmptyMVar mvar
+    unless mvarExist $ do
+        ver <- io $ takeMVar mvar
+        writeVersion ver
 
 

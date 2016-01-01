@@ -67,7 +67,7 @@ prop_mergeBTree xs ys zs = monadicIO $ do
     xt <- run $ mapToTree order size xm
     yt <- run $ mapToTree order size ym
     run $ merge order treePath xt yt
-    mergedTree <- run $ fromRight <$> BT.open treePath
+    mergedTree <- run $ openTree treePath
     let res = map (BT.lookup mergedTree) keys :: [Maybe Bs]
     let res2 = map (BT.lookup mergedTree) badKeys :: [Maybe Bs]
     assert (all isJust res)
