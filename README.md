@@ -1,6 +1,6 @@
-LevelDB HS
+lsm-hs
 ==========
-Pure Haskell implementation of LevelDB.
+LSM implementation in Haskell
 
 ## Building and Installing Using Nix
 ```

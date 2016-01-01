@@ -16,7 +16,9 @@ let
           b-tree base bytestring containers directory filelock filepath mtl
           pipes random
         ];
-        testHaskellDepends = [ base directory filepath HUnit QuickCheck ];
+        testHaskellDepends = [
+          b-tree base bytestring directory filepath HUnit pipes QuickCheck
+        ];
         description = "Log-Structured Merge-Tree in Haskell";
         license = stdenv.lib.licenses.asl20;
       };

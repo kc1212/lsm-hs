@@ -9,6 +9,7 @@ import Data.Int (Int64)
 import Control.Monad
 import Control.Monad.Reader (MonadReader, ReaderT)
 import Control.Monad.State (MonadIO, MonadState, StateT)
+import System.FileLock (FileLock)
 
 newtype LSM a = LSM (ReaderT DBOptions (StateT DBState IO) a)
     deriving (Functor, Monad, MonadIO, MonadState DBState, MonadReader DBOptions)
@@ -26,6 +27,7 @@ data DBState = DBState
     , dbIMemTable       :: ImmutableTable
     , memTableSize      :: Int64
     , currentVersion    :: String
+    , dbFileLock        :: Maybe FileLock
     -- and other properties
     }
 

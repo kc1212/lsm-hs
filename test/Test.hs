@@ -2,7 +2,7 @@
 module Main where
 
 import Test.QuickCheck (arbitrary, Property, quickCheck, (==>))
-import Test.QuickCheck.Monadic (assert, monadicIO, pick, pre, run)
+import Test.QuickCheck.Monadic (assert, monadicIO, monadic, pick, pre, run)
 import System.Directory
 import System.FilePath ((</>))
 import qualified Data.ByteString.Char8 as C
@@ -25,14 +25,14 @@ prop_createLSM = monadicIO $ do
     assert dirExist
     run $ removeDirectoryRecursive testDir
 
-prop_simpleLSM :: String -> String -> Property
-prop_simpleLSM k v = monadicIO $ do
-    run $ withLSM basicOptions $ do
+prop_singleLSM :: (String, String) -> Property
+prop_singleLSM (k, v) = monadicIO $ do
+    res <- run $ withLSM basicOptions $ do
             let key = C.pack k
             let val = C.pack v
             add key val
-            -- res <- get key
-    assert True
+            get key
+    assert (fmap C.unpack res == Just v)
 
 -- TODO this is just a port of the BTreeTest.hs
 -- better to randomly generate the entries
@@ -66,6 +66,6 @@ fromRight x =
 
 main = do
     quickCheck prop_createLSM
-    -- quickCheck prop_simpleLSM
+    quickCheck prop_singleLSM
     quickCheck prop_mergeBTree
 
