@@ -15,7 +15,7 @@ import Database.LSM.MemTable as MT
 
 emptyAction = return ()
 testDir = "/tmp/tmpdb"
-basicOptions = DBOptions testDir True False 10 100
+basicOptions = def { dbName = testDir }
 
 prop_createLSM :: Property
 prop_createLSM = monadicIO $ do
@@ -57,12 +57,6 @@ prop_mergeBTree = monadicIO $ do
         b = MT.insert (C.pack "c") (C.pack "cc")
                 (MT.insert (C.pack "d") (C.pack "dd") MT.new)
 
-
-fromRight :: Either String b -> b
-fromRight x =
-    case x of
-        Left m -> error m
-        Right m -> m
 
 main = do
     quickCheck prop_createLSM

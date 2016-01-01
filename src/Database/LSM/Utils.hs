@@ -6,12 +6,14 @@ import qualified Data.Map as Map
 import Pipes
 import System.FilePath ((</>))
 import Control.Monad (unless, liftM)
+import Control.Monad.Reader (asks)
+import Control.Monad.State (gets)
 import Control.Exception (throwIO)
 import System.Directory (doesFileExist)
 import System.IO.Error (alreadyExistsErrorType, doesNotExistErrorType, mkIOError)
 import System.Random (randomIO)
 
-import Database.LSM.Types (ImmutableTable, Bs)
+import Database.LSM.Types
 
 createFileIfMissing :: FilePath -> IO ()
 createFileIfMissing name = doesFileExist name >>= \e -> unless e (writeFile name "")
@@ -44,11 +46,24 @@ throwIOFileEmpty name =
 randomVersion :: IO String
 randomVersion = show <$> (randomIO :: IO Int)
 
+nameAndVersion :: LSM FilePath
+nameAndVersion = do
+    path <- asks dbName
+    version <- gets currentVersion
+    return (path </> version)
+
 extension :: String
 extension = ".db"
 
 io :: MonadIO m => IO a -> m a
 io = liftIO
+
+-- only use this function when the error cannot be recovered
+fromRight :: Either String b -> b
+fromRight x =
+    case x of
+        Left m -> error m
+        Right m -> m
 
 mapToProducer :: Monad m => ImmutableTable -> Producer (BT.BLeaf Bs Bs) m ()
 mapToProducer table = each (map (uncurry BT.BLeaf) (Map.toAscList table))

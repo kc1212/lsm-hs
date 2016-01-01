@@ -37,6 +37,7 @@ data DBOptions = DBOptions
     , errorIfExists     :: Bool
     , btreeOrder        :: BT.Order
     , btreeSize         :: BT.Size
+    , memtableThreshold :: Int64
     } deriving (Show)
 
 type MemTable = Map.Map Bs Bs

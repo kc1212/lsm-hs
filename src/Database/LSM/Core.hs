@@ -5,7 +5,6 @@ import qualified Data.Map as Map
 import qualified Data.ByteString as BS
 import qualified BTree as BT
 import Data.Maybe (fromJust)
-import Data.Int (Int64)
 import System.Directory (doesDirectoryExist, doesFileExist, createDirectoryIfMissing)
 import System.FileLock (lockFile, unlockFile, SharedExclusive(..))
 import Control.Monad
@@ -19,7 +18,8 @@ import qualified Database.LSM.MemTable as MT
 
 -- default options
 def :: DBOptions
-def = DBOptions "mydb" True True 10 1000
+def = DBOptions "mydb" True False 10 1000 twoMB
+        where twoMB = 2 * 1024 * 1024
 
 -- default state
 defState :: DBState
@@ -87,9 +87,11 @@ closeLSM a = do
 
 get :: Bs -> LSM (Maybe Bs)
 get k = do
+    -- this should be evaluated lazily right?
     mv1 <- Map.lookup k <$> gets dbMemTable
     mv2 <- Map.lookup k <$> gets dbIMemTable
-    let mv3 = Nothing -- TODO read from file
+    mv3 <- nameAndVersion >>= io . BT.open
+            >>= (\t -> return $ BT.lookup (fromRight t) k)
     return $ mv1 `firstJust` mv2 `firstJust` mv3
 
 firstJust :: Maybe a -> Maybe a -> Maybe a
@@ -98,13 +100,10 @@ firstJust p q =
         Just _  -> p
         _       -> q
 
--- TODO move threshold to reader monad
-threshold :: Int64
-threshold = 2 * 1024 * 1024
-
 add :: Bs -> Bs -> LSM ()
 add k v = do
     let entrySize = fromIntegral (BS.length k + BS.length v)
+    threshold <- asks memtableThreshold
     newSize <- fmap (entrySize +) (gets memTableSize)
     if newSize < threshold
     then do
