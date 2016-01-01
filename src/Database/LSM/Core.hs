@@ -3,6 +3,7 @@ module Database.LSM.Core where
 
 import qualified Data.Map as Map
 import qualified Data.ByteString as BS
+import qualified BTree as BT
 import Data.Int (Int64)
 import System.Directory (doesDirectoryExist, doesFileExist, createDirectoryIfMissing)
 import System.FileLock (withFileLock, SharedExclusive(..))
@@ -37,7 +38,7 @@ withLSM opts action = do
     -- withFileLock blocks until the lock is available
     createFileIfMissing (fileNameLock dir)
     res <- io $ withFileLock (fileNameLock dir) Exclusive
-        -- below we use a dummy state as the state is not fully implemented yet
+        -- note that some of the DBState is populated by openLSM
         (\_ -> runLSM opts (DBState memTable immutableTable 0 "")
                 (openLSM >> action))
 
@@ -53,16 +54,19 @@ loadLSM = do
 
 initLSM :: LSM ()
 initLSM = do
-    -- TODO create db file
     opts <- ask
     let dir = dbName opts
     version <- io $ (++ extension) <$> randomVersion
     let currentFile = fileNameCurrent dir
-    io $ when (createIfMissing opts)
-         (createFileIfMissing currentFile)
+    io $ BT.fromOrderedToFile
+            (btreeOrder opts)
+            (btreeSize opts)
+            (dir </> version)
+            (mapToProducer MT.new)
+    io $ createFile currentFile -- fail if already exists
     io $ writeFile currentFile version
     modify (\s -> s {currentVersion = version})
-    -- write checksum of db (in the future)
+    -- TODO write checksum of db
 
 openLSM :: LSM ()
 openLSM = do

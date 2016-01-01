@@ -33,8 +33,8 @@ data DBOptions = DBOptions
     { dbName            :: String
     , createIfMissing   :: Bool
     , errorIfExists     :: Bool
-    , bTreeOrder        :: BT.Order
-    , bTreeSize         :: BT.Size
+    , btreeOrder        :: BT.Order
+    , btreeSize         :: BT.Size
     } deriving (Show)
 
 type MemTable = Map.Map Bs Bs

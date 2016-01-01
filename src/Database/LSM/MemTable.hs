@@ -5,11 +5,13 @@ module Database.LSM.MemTable where
 -- For this project we use Data.Map, this may change later,
 -- but interface should stay the same.
 import qualified Data.Map as Map
+import Data.ByteString (empty)
 
 import Database.LSM.Types (Bs, MemTable)
 
+-- there must be at least one entry otherwise BTree fails
 new :: MemTable
-new = Map.empty
+new = Map.insert empty empty Map.empty
 
 insert :: Bs -> Bs -> MemTable -> MemTable
 insert = Map.insert

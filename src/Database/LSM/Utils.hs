@@ -13,13 +13,6 @@ import System.Random (randomIO)
 
 import Database.LSM.Types (ImmutableTable, Bs)
 
--- TODO: What should the order and size be?
-btreeOrder :: BT.Order
-btreeOrder = 10
-
-btreeSize :: BT.Size
-btreeSize = 1000
-
 createFileIfMissing :: FilePath -> IO ()
 createFileIfMissing name = doesFileExist name >>= \e -> unless e (writeFile name "")
 
@@ -57,19 +50,19 @@ extension = ".db"
 io :: MonadIO m => IO a -> m a
 io = liftIO
 
-fromMapToProducer :: Monad m => ImmutableTable -> Producer (BT.BLeaf Bs Bs) m ()
-fromMapToProducer table = each (map (uncurry BT.BLeaf) (Map.toAscList table))
+mapToProducer :: Monad m => ImmutableTable -> Producer (BT.BLeaf Bs Bs) m ()
+mapToProducer table = each (map (uncurry BT.BLeaf) (Map.toAscList table))
 
-getBTreeM :: Monad m => Producer (BT.BLeaf Bs Bs) m () -> m (BT.LookupTree Bs Bs)
-getBTreeM producer = do
-    tree <- liftM BT.fromByteString (BT.fromOrderedToByteString btreeOrder btreeSize producer)
+producerToTree :: Monad m => BT.Order -> BT.Size -> Producer (BT.BLeaf Bs Bs) m () -> m (BT.LookupTree Bs Bs)
+producerToTree order size producer = do
+    tree <- liftM BT.fromByteString (BT.fromOrderedToByteString order size producer)
     return $ case tree of
         Left m -> error m
         Right x -> x
 
-mapToTree :: Monad m => ImmutableTable -> m (BT.LookupTree Bs Bs)
-mapToTree = getBTreeM . fromMapToProducer
+mapToTree :: Monad m => BT.Order -> BT.Size -> ImmutableTable -> m (BT.LookupTree Bs Bs)
+mapToTree order size = producerToTree order size . mapToProducer
 
-merge :: FilePath -> BT.LookupTree Bs Bs -> BT.LookupTree Bs Bs -> IO ()
-merge fpath t1 t2 = BT.mergeTrees (\a _ -> return a) btreeOrder fpath [t1, t2]
+merge :: BT.Order -> FilePath -> BT.LookupTree Bs Bs -> BT.LookupTree Bs Bs -> IO ()
+merge order fpath t1 t2 = BT.mergeTrees (\a _ -> return a) order fpath [t1, t2]
 
