@@ -5,6 +5,7 @@ import qualified Data.Map as Map
 import qualified Data.ByteString.Lazy as BS
 import qualified BTree as BT
 import Data.Maybe (fromJust)
+import Data.Int (Int64)
 import System.Directory (doesDirectoryExist, doesFileExist, createDirectoryIfMissing)
 import System.FileLock (lockFile, unlockFile, SharedExclusive(..))
 import Control.Concurrent (forkIO)
@@ -110,23 +111,26 @@ add k v = do
                 })
 
     threshold <- asks memtableThreshold
-    when (newSize > threshold) $ do
-        syncToDisk -- wait for async process to finish before starting a new one
-        io $ logStdErr ("Threshold reached (" ++ show newSize ++ " > " ++ show threshold ++ ").")
-        oldMemTable <- gets dbMemTable
-        modify (\s -> s { dbIMemTable = oldMemTable
-                        , dbMemTable = MT.new
-                        , memTableSize = 0 })
-        order <- asks btreeOrder
-        size <- asks btreeSize
-        name <- asks dbName
-        oldVer <- readVersion
-        newVer <- io randomVersion
-        tree <- gets dbIMemTable >>= io . mapToTree order size
-        mvar <- gets dbMVar
-        modify (\s -> s { dbAsyncRunning = True })
-        _ <- io $ forkIO (mergeToDisk order name oldVer newVer tree >>= putMVar mvar)
-        return ()
+    writeToIMem newSize threshold
+    
+writeToIMem :: Int64 -> Int64 -> LSM ()
+writeToIMem sz t = when (sz > t) $ do 
+    syncToDisk -- wait for async process to finish before starting a new one
+    io $ logStdErr ("Threshold reached (" ++ show sz ++ " > " ++ show t ++ ").")
+    oldMemTable <- gets dbMemTable
+    modify (\s -> s { dbIMemTable = oldMemTable
+                    , dbMemTable = MT.new
+                    , memTableSize = 0 })
+    order <- asks btreeOrder
+    size <- asks btreeSize
+    name <- asks dbName
+    oldVer <- readVersion
+    newVer <- io randomVersion
+    tree <- gets dbIMemTable >>= io . mapToTree order size
+    mvar <- gets dbMVar
+    modify (\s -> s { dbAsyncRunning = True })
+    _ <- io $ forkIO (mergeToDisk order name oldVer newVer tree >>= putMVar mvar)
+    return ()
 
 mergeToDisk :: BT.Order -> FilePath -> String -> String -> BT.LookupTree Bs Bs -> IO String
 mergeToDisk order path oldVer newVer newTree = do
@@ -159,7 +163,7 @@ updateVersionBlock = do
 
 syncToDisk :: LSM ()
 syncToDisk = do
-    io $ logStdErr "Syncthing to disk."
+    io $ logStdErr "Syncing to disk."
     updateVersionBlock
     -- immutable table should be redundant after version update
     order <- asks btreeOrder
