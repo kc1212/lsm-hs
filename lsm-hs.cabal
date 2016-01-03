@@ -4,19 +4,19 @@
 name:                lsm-hs
 version:             0.1.0.0
 synopsis:            Log-Structured Merge-Tree in Haskell
--- description:         
+-- description:
 license:             Apache-2.0
 license-file:        LICENSE
 author:              Kelong Cong, Aaron Ang
 maintainer:          kc04bc@gmx.com, awz.ang@gmail.com
--- copyright:           
+-- copyright:
 category:            Database
 build-type:          Simple
 extra-source-files:  README.md
 cabal-version:       >=1.10
 
 library
-  ghc-options:       -Wall
+  ghc-options:       -W -Wall
   exposed-modules:     Database.LSM
                      , Database.LSM.Core
                      , Database.LSM.MemTable
@@ -24,28 +24,33 @@ library
                      , Database.LSM.Types
   -- other-modules:
   -- other-extensions:
-  build-depends:       base >=4.8 && <4.9
-                     , mtl
-                     , filepath
-                     , directory
-                     , containers
-                     , bytestring
-                     , filelock
-                     , random
-                     , pipes
-                     , b-tree
+  build-depends:       base         >= 4.8  && <4.9
+                     , mtl          >= 2.2  && < 2.3
+                     , filepath     >= 1.4  && < 1.5
+                     , directory    >= 1.2  && < 1.3
+                     , containers   >= 0.5  && < 0.6
+                     , bytestring   >= 0.10 && < 0.11
+                     , filelock     >= 0.1.0 && < 0.1.1
+                     , random       >= 1.1  && < 1.2
+                     , pipes        >= 4.1  && < 4.2
+                     , b-tree       == 0.1.2
   hs-source-dirs:      src
   default-language:    Haskell2010
 
 test-suite Tests
+  ghc-options:       -W -Wall
   main-is:             Test.hs
   hs-source-dirs:      test
   type:                exitcode-stdio-1.0
   build-depends:       base >=4.8 && <4.9
-                     , filepath
-                     , directory
-                     , lsm-hs
+                     , mtl          >= 2.2  && < 2.3
+                     , filepath     >= 1.4  && < 1.5
+                     , directory    >= 1.2  && < 1.3
+                     , bytestring   >= 0.10 && < 0.11
+                     , pipes        >= 4.1  && < 4.2
+                     , b-tree       == 0.1.2
                      , QuickCheck
                      , HUnit
+                     , lsm-hs
   default-language:    Haskell2010
 

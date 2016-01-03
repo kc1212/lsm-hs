@@ -1,6 +1,6 @@
-LevelDB HS
+lsm-hs
 ==========
-Pure Haskell implementation of LevelDB.
+LSM implementation in Haskell
 
 ## Building and Installing Using Nix
 ```
@@ -18,6 +18,17 @@ cabal install
 ```
 for more information on working with Nix and Cabal see:
 http://funloop.org/post/2015-02-10-using-nix-from-arch.html
+
+## Building and Installing Using Stack
+```
+stack build
+
+# to try the library
+stack repl
+
+# to run the tests
+stack test 2> lsm.log
+```
 
 ## Example Usage
 ```

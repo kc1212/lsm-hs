@@ -1,76 +1,181 @@
 
 module Database.LSM.Core where
 
+import qualified Data.Map as Map
+import qualified Data.ByteString.Lazy as BS
+import qualified BTree as BT
+import Data.Maybe (fromJust)
+import Data.Int (Int64)
 import System.Directory (doesDirectoryExist, doesFileExist, createDirectoryIfMissing)
-import System.FileLock (withFileLock, SharedExclusive(..))
+import System.FileLock (lockFile, unlockFile, SharedExclusive(..))
+import Control.Concurrent (forkIO)
+import Control.Concurrent.MVar
 import Control.Monad
 import Control.Monad.Reader (runReaderT, asks, ask)
-import Control.Monad.State (runStateT, modify)
+import Control.Monad.State (runStateT, modify, gets)
 import System.FilePath ((</>))
 
 import Database.LSM.Utils
 import Database.LSM.Types
 import qualified Database.LSM.MemTable as MT
 
+-- default options
+def :: DBOptions
+def = DBOptions "mydb" True True 10 1000 twoMB
+        where twoMB = 2 * 1024 * 1024
+
 runLSM :: DBOptions -> DBState -> LSM a -> IO (a, DBState)
 runLSM ops st (LSM a) = runStateT (runReaderT a ops) st
 
 withLSM :: DBOptions -> LSM a -> IO a
 withLSM opts action = do
-
-    -- memTable always start in empty state
-    let memTable        = MT.new
-    let immutableTable  = MT.new
-    let dir             = dbName opts
-
-    dirExist <- doesDirectoryExist dir
-    when (errorIfExists opts && dirExist)
-         (throwIOAlreadyExists dir)
-
-    when (createIfMissing opts)
-         (createDirectoryIfMissing False dir)
-
-    -- create a LOCK file and perform actions while the lock is being held
-    -- withFileLock blocks until the lock is available
-    createFileIfMissing (fileNameLock dir)
-    res <- io $ withFileLock (fileNameLock dir) Exclusive
-        -- below we use a dummy state as the state is not fully implemented yet
-        (\_ -> runLSM opts (DBState memTable immutableTable 0 "")
-                (openLSM >> action))
-
+    mvar <- newEmptyMVar
+    let st = DBState MT.new MT.new 0 Nothing mvar False
+    res <- runLSM opts st (openLSM >> action >>= closeLSM)
     return $ fst res
 
 loadLSM :: LSM ()
 loadLSM = do
     currentFile <- fileNameCurrent <$> asks dbName
-    currentDB <- io $ readFile currentFile
-    if null currentDB
-        then io $ throwIOFileEmpty (currentFile </> currentDB)
-        else modify (\s -> s {currentVersion = currentDB})
+    version <- io $ readFile currentFile
+    io $ logStdErr ("Loading existing LSM, version: " ++  version ++ ".")
+    when (null version) (io $ throwIOFileEmpty (currentFile </> version))
+    io $ logStdErr "Loading Completed."
 
 initLSM :: LSM ()
 initLSM = do
-    -- TODO create db file
+    io $ logStdErr "Initialising LSM."
     opts <- ask
     let dir = dbName opts
-    version <- io $ (++ extension) <$> randomVersion
     let currentFile = fileNameCurrent dir
-    io $ when (createIfMissing opts)
-         (createFileIfMissing currentFile)
-    io $ writeFile currentFile version
-    modify (\s -> s {currentVersion = version})
-    -- write checksum of db (in the future)
+    version <- io randomVersion
+    io $ logStdErr ("Initial version is: " ++ version)
+    io $ BT.fromOrderedToFile
+            (btreeOrder opts)
+            (btreeSize opts)
+            (dir </> version)
+            (mapToProducer MT.new)
+    io $ createFile currentFile
+    writeVersion version
+    io $ logStdErr "Initialisation completed."
+    -- TODO write checksum of db
 
 openLSM :: LSM ()
 openLSM = do
-    dir <- asks dbName
-    exists <- io $ doesFileExist (fileNameCurrent dir)
-    if exists then loadLSM else initLSM
+    opts <- ask
+    let dir = dbName opts
+
+    dirExist <- io $ doesDirectoryExist dir
+    io $ when (errorIfExists opts && dirExist)
+                (throwIOAlreadyExists dir)
+
+    io $ when (createIfMissing opts)
+                (createDirectoryIfMissing False dir)
+
+    -- create LOCK file, note lockFile blocks until the lock is available
+    io $ createFileIfMissing (fileNameLock dir)
+    flock <- io $ lockFile (fileNameLock dir) Exclusive
+    modify (\s -> s { dbFileLock = Just flock })
+
+    currExists <- io $ doesFileExist (fileNameCurrent dir)
+    if currExists then loadLSM else initLSM
+
+closeLSM :: a -> LSM a
+closeLSM a = do
+    io $ logStdErr "Closing LSM."
+    syncToDisk                              -- sync memtable with btree
+    flock <- fromJust <$> gets dbFileLock   -- the lock must be present
+    io $ unlockFile flock
+    return a
 
 get :: Bs -> LSM (Maybe Bs)
-get = undefined
+get k = do
+    updateVersionNoBlock
+    mv1 <- Map.lookup k <$> gets dbMemTable
+    mv2 <- Map.lookup k <$> gets dbIMemTable
+    mv3 <- nameAndVersion
+            >>= io . openTree
+            >>= (\t -> return $ BT.lookup t k)
+    return $ mv1 `firstJust` mv2 `firstJust` mv3
 
 add :: Bs -> Bs -> LSM ()
-add = undefined
+add k v = do
+    io $ logStdErr ("LSM addition where k = " ++ show (BS.unpack k) ++ " and v = " ++ show (BS.unpack v) ++ ".")
+    updateVersionNoBlock
+    let entrySize = fromIntegral (BS.length k + BS.length v)
+    newSize <- fmap (entrySize +) (gets memTableSize)
+    io $ logStdErr ("New size: " ++ show newSize)
+    currMemTable <- gets dbMemTable
+    modify (\s -> s
+                { dbMemTable = Map.insert k v currMemTable
+                , memTableSize = newSize
+                })
+
+    threshold <- asks memtableThreshold
+    writeToIMem newSize threshold
+    io $ logStdErr ("LSM addition completed.")
+    
+writeToIMem :: Int64 -> Int64 -> LSM ()
+writeToIMem sz t = when (sz > t) $ do 
+    updateVersionBlock -- wait for async process to finish before starting a new one
+    io $ logStdErr ("Threshold reached (" ++ show sz ++ " > " ++ show t ++ ").")
+    oldMemTable <- gets dbMemTable
+    modify (\s -> s { dbIMemTable = oldMemTable
+                    , dbMemTable = MT.new
+                    , memTableSize = 0 })
+    order <- asks btreeOrder
+    size <- asks btreeSize
+    name <- asks dbName
+    oldVer <- readVersion
+    newVer <- io randomVersion
+    tree <- gets dbIMemTable >>= io . mapToTree order size
+    mvar <- gets dbMVar
+    modify (\s -> s { dbAsyncRunning = True })
+    _ <- io $ forkIO (mergeToDisk order name oldVer newVer tree >>= putMVar mvar)
+    return ()
+
+mergeToDisk :: BT.Order -> FilePath -> String -> String -> BT.LookupTree Bs Bs -> IO String
+mergeToDisk order path oldVer newVer newTree = do
+    let oldPath = path </> oldVer
+    let newPath = path </> newVer
+    oldTree <- openTree oldPath
+    io $ logStdErr ("Merging started, from " ++ oldPath ++ " to " ++ newPath ++ ".")
+    merge order newPath oldTree newTree
+    io $ logStdErr "Merging finished."
+    return newVer
+
+updateVersionNoBlock :: LSM ()
+updateVersionNoBlock = do
+    io $ logStdErr "Updating version - non blocking."
+    mvar <- gets dbMVar
+    res <- io $ tryTakeMVar mvar
+    case res of
+        Nothing -> return ()
+        Just v  -> writeVersion v >> modify (\s -> s { dbAsyncRunning = False })
+
+updateVersionBlock :: LSM ()
+updateVersionBlock = do
+    io $ logStdErr "Updating version - blocking."
+    running <- gets dbAsyncRunning
+    when running $ do
+        mvar <- gets dbMVar
+        v <- io $ takeMVar mvar -- blocks
+        writeVersion v
+        modify (\s -> s { dbAsyncRunning = False })
+
+syncToDisk :: LSM ()
+syncToDisk = do
+    io $ logStdErr "Syncing to disk."
+    updateVersionBlock
+    -- immutable table should be redundant after version update
+    order <- asks btreeOrder
+    size <- asks btreeSize
+    name <- asks dbName
+    oldVer <- readVersion
+    newVer <- io randomVersion
+    io $ logStdErr ("Syncing to disk, new version: " ++ newVer)
+    tree <- gets dbMemTable >>= io . mapToTree order size
+    ver <- io $ mergeToDisk order name oldVer newVer tree
+    writeVersion ver
 
 

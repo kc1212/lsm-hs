@@ -1,0 +1,8 @@
+flags: {}
+extra-package-dbs: []
+packages:
+- '.'
+extra-deps:
+- b-tree-0.1.2
+- pipes-interleave-0.2.1
+resolver: lts-3.20
