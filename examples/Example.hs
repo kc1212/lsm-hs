@@ -8,7 +8,7 @@ import Data.Maybe (fromJust)
 import Database.LSM
 
 main = do
-    withLSM def { dbName = "ExampleDB" 
+    withLSM def { dbName = "/tmp/ExampleDB" 
                 , errorIfExists = False } $ do
         add (B.pack "Key 1") (B.pack "Value 1")
         res1 <- get (B.pack "Key 1")

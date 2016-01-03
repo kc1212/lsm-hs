@@ -1,6 +1,6 @@
 lsm-hs
 ==========
-LSM implementation in Haskell
+LSM implementation in Haskell.
 
 ## Building and Installing Using Nix
 ```
@@ -16,7 +16,7 @@ cabal repl
 cabal sandbox init
 cabal install
 ```
-for more information on working with Nix and Cabal see:
+For more information on working with Nix and Cabal see:
 http://funloop.org/post/2015-02-10-using-nix-from-arch.html
 
 ## Building and Installing Using Stack
@@ -30,16 +30,8 @@ stack repl
 stack test 2> lsm.log
 ```
 
-## Example Usage
-```
-withLevelDB "/tmp/testdb" options (
-    do
-        let key = (C8.pack "key1", (0, MT.Value))
-        add  key (C8.pack "value")
-        res <- get key
-        liftIO $ print res
-    )
-```
+## Examples
+Examples can be found in the `examples` directory.
 
 ## Literature
 * [Reviewing LevelDB](http://ayende.com/blog/161410/reviewing-leveldb-part-i-what-is-this-all-about)

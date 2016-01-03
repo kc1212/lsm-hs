@@ -185,4 +185,3 @@ syncToDisk = do
     ver <- io $ mergeToDisk order name oldVer newVer tree
     writeVersion ver
 
-
