@@ -2,8 +2,8 @@
 module Database.LSM.Core where
 
 import qualified Data.Map as Map
-import qualified Data.ByteString.Lazy as BS
-import qualified Data.ByteString.Lazy.Char8 as BSC
+import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString.Lazy.Char8 as C
 import qualified BTree as BT
 import Data.Maybe (fromJust)
 import Data.Int (Int64)
@@ -101,9 +101,9 @@ get k = do
 
 add :: Bs -> Bs -> LSM ()
 add k v = do
-    io $ logStdErr ("LSM addition where k = " ++ show (BS.unpack k) ++ " and v = " ++ show (BS.unpack v) ++ ".")
+    io $ logStdErr ("LSM addition where k = " ++ show (B.unpack k) ++ " and v = " ++ show (B.unpack v) ++ ".")
     updateVersionNoBlock
-    let entrySize = fromIntegral (BS.length k + BS.length v)
+    let entrySize = fromIntegral (B.length k + B.length v)
     newSize <- fmap (entrySize +) (gets memTableSize)
     io $ logStdErr ("New size: " ++ show newSize)
     currMemTable <- gets dbMemTable
@@ -139,7 +139,7 @@ update :: Bs -> Bs -> LSM ()
 update k v = add k v
 
 delete :: Bs -> LSM ()
-delete k = add k (BSC.pack "")
+delete k = add k (C.pack "")
 
 mergeToDisk :: BT.Order -> FilePath -> String -> String -> BT.LookupTree Bs Bs -> IO String
 mergeToDisk order path oldVer newVer newTree = do
