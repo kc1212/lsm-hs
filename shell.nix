@@ -17,7 +17,8 @@ let
           pipes random
         ];
         testHaskellDepends = [
-          b-tree base bytestring directory filepath HUnit pipes QuickCheck
+          b-tree base bytestring directory filepath HUnit mtl pipes
+          QuickCheck
         ];
         description = "Log-Structured Merge-Tree in Haskell";
         license = stdenv.lib.licenses.asl20;
