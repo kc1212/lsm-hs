@@ -113,7 +113,7 @@ add k v = do
 
     threshold <- asks memtableThreshold
     writeToIMem newSize threshold
-    io $ logStdErr ("LMS addition completed.")
+    io $ logStdErr ("LSM addition completed.")
     
 writeToIMem :: Int64 -> Int64 -> LSM ()
 writeToIMem sz t = when (sz > t) $ do 
