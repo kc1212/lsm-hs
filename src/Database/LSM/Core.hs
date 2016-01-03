@@ -117,7 +117,7 @@ add k v = do
     
 writeToIMem :: Int64 -> Int64 -> LSM ()
 writeToIMem sz t = when (sz > t) $ do 
-    syncToDisk -- wait for async process to finish before starting a new one
+    updateVersionBlock -- wait for async process to finish before starting a new one
     io $ logStdErr ("Threshold reached (" ++ show sz ++ " > " ++ show t ++ ").")
     oldMemTable <- gets dbMemTable
     modify (\s -> s { dbIMemTable = oldMemTable
