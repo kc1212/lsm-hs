@@ -149,13 +149,9 @@ updateVersionNoBlock = do
     io $ logStdErr "Updating version - non blocking."
     mvar <- gets dbMVar
     res <- io $ tryTakeMVar mvar
-    emptyMVar <- io $ newEmptyMVar
     case res of
         Nothing -> return ()
-        Just v  -> writeVersion v >> modify (\s -> s 
-            { dbAsyncRunning = True
-            , dbMVar = emptyMVar 
-            })
+        Just v  -> writeVersion v >> modify (\s -> s { dbAsyncRunning = False })
 
 updateVersionBlock :: LSM ()
 updateVersionBlock = do

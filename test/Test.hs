@@ -12,6 +12,9 @@ import System.FilePath ((</>))
 import System.IO.Error (catchIOError, isDoesNotExistError)
 import qualified Data.ByteString.Lazy as B
 import qualified BTree as BT
+import qualified Data.ByteString.Lazy.Char8 as BSC
+import Control.Concurrent (forkIO)
+import Control.Concurrent.MVar
 
 import Database.LSM
 import Database.LSM.Utils
