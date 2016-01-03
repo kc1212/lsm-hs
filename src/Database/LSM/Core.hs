@@ -118,7 +118,7 @@ add k v = do
     
 asyncWriteToDisk :: Int64 -> Int64 -> LSM ()
 asyncWriteToDisk sz t = when (sz > t) $ do 
-    syncToDisk -- wait for async process to finish before starting a new one
+    updateVersionBlock -- wait for async process to finish before starting a new one
     io $ logStdErr ("Threshold reached (" ++ show sz ++ " > " ++ show t ++ ").")
     oldMemTable <- gets dbMemTable
     modify (\s -> s { dbIMemTable = oldMemTable
@@ -180,7 +180,7 @@ syncToDisk = do
     name <- asks dbName
     oldVer <- readVersion
     newVer <- io randomVersion
-    io $ logStdErr ("Syncthing to disk, new version: " ++ newVer)
+    io $ logStdErr ("Syncing to disk, new version: " ++ newVer)
     tree <- gets dbMemTable >>= io . mapToTree order size
     ver <- io $ mergeToDisk order name oldVer newVer tree
     writeVersion ver
