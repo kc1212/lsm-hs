@@ -171,7 +171,7 @@ syncToDisk = do
     name <- asks dbName
     oldVer <- readVersion
     newVer <- io randomVersion
-    io $ logStdErr ("Syncthing to disk, new version: " ++ newVer)
+    io $ logStdErr ("Syncing to disk, new version: " ++ newVer)
     tree <- gets dbMemTable >>= io . mapToTree order size
     ver <- io $ mergeToDisk order name oldVer newVer tree
     writeVersion ver
