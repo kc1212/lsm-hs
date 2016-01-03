@@ -3,6 +3,7 @@ module Database.LSM.Core where
 
 import qualified Data.Map as Map
 import qualified Data.ByteString.Lazy as BS
+import qualified Data.ByteString.Lazy.Char8 as BSC
 import qualified BTree as BT
 import Data.Maybe (fromJust)
 import Data.Int (Int64)
@@ -112,11 +113,11 @@ add k v = do
                 })
 
     threshold <- asks memtableThreshold
-    writeToIMem newSize threshold
+    asyncWriteToDisk newSize threshold
     io $ logStdErr ("LSM addition completed.")
     
-writeToIMem :: Int64 -> Int64 -> LSM ()
-writeToIMem sz t = when (sz > t) $ do 
+asyncWriteToDisk :: Int64 -> Int64 -> LSM ()
+asyncWriteToDisk sz t = when (sz > t) $ do 
     syncToDisk -- wait for async process to finish before starting a new one
     io $ logStdErr ("Threshold reached (" ++ show sz ++ " > " ++ show t ++ ").")
     oldMemTable <- gets dbMemTable
@@ -133,6 +134,12 @@ writeToIMem sz t = when (sz > t) $ do
     modify (\s -> s { dbAsyncRunning = True })
     _ <- io $ forkIO (mergeToDisk order name oldVer newVer tree >>= putMVar mvar)
     return ()
+
+update :: Bs -> Bs -> LSM ()
+update k v = add k v
+
+delete :: Bs -> LSM ()
+delete k = add k (BSC.pack "")
 
 mergeToDisk :: BT.Order -> FilePath -> String -> String -> BT.LookupTree Bs Bs -> IO String
 mergeToDisk order path oldVer newVer newTree = do
