@@ -100,10 +100,11 @@ get k = do
 
 add :: Bs -> Bs -> LSM ()
 add k v = do
+    io $ logStdErr ("LSM addition where k = " ++ show (BS.unpack k) ++ " and v = " ++ show (BS.unpack v) ++ ".")
     updateVersionNoBlock
     let entrySize = fromIntegral (BS.length k + BS.length v)
     newSize <- fmap (entrySize +) (gets memTableSize)
-
+    io $ logStdErr ("New size: " ++ show newSize)
     currMemTable <- gets dbMemTable
     modify (\s -> s
                 { dbMemTable = Map.insert k v currMemTable
@@ -112,10 +113,11 @@ add k v = do
 
     threshold <- asks memtableThreshold
     writeToIMem newSize threshold
+    io $ logStdErr ("LSM addition completed.")
     
 writeToIMem :: Int64 -> Int64 -> LSM ()
 writeToIMem sz t = when (sz > t) $ do 
-    syncToDisk -- wait for async process to finish before starting a new one
+    updateVersionBlock -- wait for async process to finish before starting a new one
     io $ logStdErr ("Threshold reached (" ++ show sz ++ " > " ++ show t ++ ").")
     oldMemTable <- gets dbMemTable
     modify (\s -> s { dbIMemTable = oldMemTable
@@ -149,7 +151,7 @@ updateVersionNoBlock = do
     res <- io $ tryTakeMVar mvar
     case res of
         Nothing -> return ()
-        Just v  -> writeVersion v >> modify (\s -> s { dbAsyncRunning = True })
+        Just v  -> writeVersion v >> modify (\s -> s { dbAsyncRunning = False })
 
 updateVersionBlock :: LSM ()
 updateVersionBlock = do
