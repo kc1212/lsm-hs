@@ -4,6 +4,8 @@ module Main where
 import Control.Monad (unless)
 import Control.Monad.State (gets)
 import Data.Maybe (isJust, isNothing)
+import Data.List (nubBy)
+import Data.Char (isDigit)
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
 import Test.QuickCheck.Modifiers ( NonEmptyList(..) )
@@ -19,12 +21,12 @@ import Database.LSM.Utils
 import Database.LSM.MemTable as MT
 import Database.LSM.Types
 
-instance Arbitrary B.ByteString where
-    arbitrary = B.pack <$> (suchThat arbitrary (\a -> not $ null a))
-    shrink xs = B.pack <$> shrink (B.unpack xs)
+instance Arbitrary C.ByteString where
+    arbitrary = C.pack <$> (suchThat arbitrary (\a -> not (null a)))
+    shrink xs = C.pack <$> shrink (C.unpack xs)
 
-instance CoArbitrary B.ByteString where
-    coarbitrary = coarbitrary . B.unpack
+instance CoArbitrary C.ByteString where
+    coarbitrary = coarbitrary . C.unpack
 
 myRemoveDir dir =
     catchIOError
@@ -51,7 +53,7 @@ prop_singleEntry (k, v) k2 = monadicIO $ do
     res <- run $ withLSM basicOptions $ do
             add k v
             r1 <- get k
-            r2 <- if k2 == k || B.null k2
+            r2 <- if k2 == k || C.null k2
                     then return Nothing
                     else get k2
             return (r1, r2)
@@ -72,18 +74,13 @@ prop_size :: Positive Int -> Property
 prop_size (Positive n) = monadicIO $ do
     run $ myRemoveDir testDir
     forAllM (vector n) $ \xs -> do
-        res <- run $ withLSM basicOptions { memtableThreshold = 9000 } $ do
+        res <- run $ withLSM basicOptions { memtableThreshold = 99999999999 } $ do -- This test will fail if threshold is met
                 mapM_ (uncurry add) xs
-                size <- gets memTableSize
-                return size
-        let actualSize = sum (map (\(k, v) -> B.length k + B.length v) (uniqueLast xs))
+                gets memTableSize
+        let actualSize = sum (map (\(k, v) -> C.length k + C.length v) (uniqueLast xs))
         assert (res == actualSize)
         where
-            uniqueLast [] = []
-            uniqueLast (x@(k, v) : xs)
-                | hasKey k xs = uniqueLast xs
-                | otherwise      = x : uniqueLast xs
-            hasKey k xs = foldr (\(l, _) b -> k == l || b) False xs
+            uniqueLast = reverse . nubBy (\(x, _) (y, _) -> x == y) . reverse
 
 prop_readingFromDisk :: Positive Int -> Property
 prop_readingFromDisk (Positive n) = monadicIO $ do
@@ -124,7 +121,7 @@ prop_mergeBTree xs ys zs = monadicIO $ do
         ym = foldr (uncurry MT.insert) MT.new ys :: ImmutableTable
         keys = map fst (xs ++ ys)
         -- TODO refactor to use generator rather than filtering
-        badKeys = filter (\x -> notElem x keys && (not . B.null) x) zs
+        badKeys = filter (\x -> notElem x keys && (not . C.null) x) zs
 
 main = do
     quickCheck prop_mergeBTree
