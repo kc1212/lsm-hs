@@ -10,7 +10,6 @@ import Control.Concurrent.MVar (MVar)
 import Control.Monad
 import Control.Monad.Reader (MonadReader, ReaderT)
 import Control.Monad.State (MonadIO, MonadState, StateT)
-import System.FileLock (FileLock)
 
 newtype LSM a = LSM (ReaderT DBOptions (StateT DBState IO) a)
     deriving (Functor, Monad, MonadIO, MonadState DBState, MonadReader DBOptions)
@@ -27,7 +26,6 @@ data DBState = DBState
     { dbMemTable        :: MemTable
     , dbIMemTable       :: ImmutableTable
     , memTableSize      :: Int64
-    , dbFileLock        :: Maybe FileLock -- TODO Maybe is not nice...
     , dbMVar            :: MVar String
     , dbAsyncRunning    :: Bool
     -- and other properties
