@@ -58,18 +58,32 @@ prop_singleEntry (k, v) k2 = monadicIO $ do
     assert (res == (Just v, Nothing))
 
 -- prop_multiEntryOneByOne
-prop_multiEntryAndSize :: Positive Int -> Property
-prop_multiEntryAndSize (Positive n) = monadicIO $ do
+prop_multiEntry :: Positive Int -> Property
+prop_multiEntry (Positive n) = monadicIO $ do
     run $ myRemoveDir testDir
     forAllM (vector n) $ \xs -> do
-        (res, sz) <- run $ withLSM basicOptions $ do
+        res <- run $ withLSM basicOptions $ do
                 mapM_ (uncurry add) xs
                 res <- mapM (get . fst) xs
-                sz <- gets memTableSize
-                return (res, sz)
-        let actualSz = sum (map (\(k, v) -> B.length k + B.length v) xs)
+                return res
         assert (all isJust res)
-        assert (sz == actualSz)
+
+prop_size :: Positive Int -> Property
+prop_size (Positive n) = monadicIO $ do
+    run $ myRemoveDir testDir
+    forAllM (vector n) $ \xs -> do
+        res <- run $ withLSM basicOptions { memtableThreshold = 9000 } $ do
+                mapM_ (uncurry add) xs
+                size <- gets memTableSize
+                return size
+        let actualSize = sum (map (\(k, v) -> B.length k + B.length v) (uniqueLast xs))
+        assert (res == actualSize)
+        where
+            uniqueLast [] = []
+            uniqueLast (x@(k, v) : xs)
+                | hasKey k xs = uniqueLast xs
+                | otherwise      = x : uniqueLast xs
+            hasKey k xs = foldr (\(l, _) b -> k == l || b) False xs
 
 prop_readingFromDisk :: Positive Int -> Property
 prop_readingFromDisk (Positive n) = monadicIO $ do
@@ -116,18 +130,9 @@ main = do
     quickCheck prop_mergeBTree
     quickCheck prop_createLSM
     quickCheck prop_singleEntry
-    quickCheck prop_multiEntryAndSize
+    quickCheck prop_multiEntry
     quickCheck prop_readingFromDisk
-    verboseCheck prop_smallThreshold
+    quickCheck prop_smallThreshold
+    quickCheck prop_size
     -- quickCheck (prop_multiEntryAndSize (Positive 100))
-
-sizeCorrectionTest = do
-    myRemoveDir testDir
-    withLSM basicOptions { memtableThreshold = 10 } $ do
-        let key1 = C.pack "1234"
-        let val1 = C.pack "1234"
-        let val2 = C.pack "1234567"
-        add key1 val1
-        add key1 val2
-        delete key1 
 
