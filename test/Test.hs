@@ -11,6 +11,7 @@ import System.Directory
 import System.FilePath ((</>))
 import System.IO.Error (catchIOError, isDoesNotExistError)
 import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString.Lazy.Char8 as C
 import qualified BTree as BT
 
 import Database.LSM
@@ -119,4 +120,14 @@ main = do
     quickCheck prop_readingFromDisk
     verboseCheck prop_smallThreshold
     -- quickCheck (prop_multiEntryAndSize (Positive 100))
+
+sizeCorrectionTest = do
+    myRemoveDir testDir
+    withLSM basicOptions { memtableThreshold = 10 } $ do
+        let key1 = C.pack "1234"
+        let val1 = C.pack "1234"
+        let val2 = C.pack "1234567"
+        add key1 val1
+        add key1 val2
+        delete key1 
 

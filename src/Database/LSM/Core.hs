@@ -103,15 +103,15 @@ add :: Bs -> Bs -> LSM ()
 add k v = do
     io $ logStdErr ("LSM addition where k = " ++ show (B.unpack k) ++ " and v = " ++ show (B.unpack v) ++ ".")
     updateVersionNoBlock
-    let entrySize = fromIntegral (B.length k + B.length v)
-    newSize <- fmap (entrySize +) (gets memTableSize)
-    io $ logStdErr ("New size: " ++ show newSize)
     currMemTable <- gets dbMemTable
+    let correction = computeCorrection k (MT.lookup k currMemTable)
+    let entrySize = fromIntegral (B.length k + B.length v)
+    newSize <- fmap (entrySize - correction +) (gets memTableSize)
+    io $ logStdErr ("New size: " ++ show newSize)
     modify (\s -> s
                 { dbMemTable = Map.insert k v currMemTable
                 , memTableSize = newSize
                 })
-
     threshold <- asks memtableThreshold
     asyncWriteToDisk newSize threshold
     io $ logStdErr ("LSM addition completed.")
@@ -184,4 +184,8 @@ syncToDisk = do
     tree <- gets dbMemTable >>= io . mapToTree order size
     ver <- io $ mergeToDisk order name oldVer newVer tree
     writeVersion ver
+
+computeCorrection :: Bs -> Maybe Bs -> Int64
+computeCorrection _ Nothing  = 0
+computeCorrection k (Just v) = B.length k + B.length v
 
