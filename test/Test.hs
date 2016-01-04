@@ -131,3 +131,9 @@ sizeCorrectionTest = do
         add key1 val2
         delete key1 
 
+addEmptyValue = do
+    myRemoveDir testDir
+    withLSM basicOptions $ do
+        let key = C.pack "key"
+        let val = C.pack ""
+        add key val
