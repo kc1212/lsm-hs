@@ -101,8 +101,8 @@ get k = do
 
 add :: Bs -> Bs -> LSM ()
 add k v = do
-    when (isEmptyBS k) (io $ throwIOBadKey "")
-    when (isEmptyBS v) (io $ throwIOBadValue "") 
+    when (B.null k) (io $ throwIOBadKey "")
+    when (B.null v) (io $ throwIOBadValue "") 
     io $ logStdErr ("LSM addition where k = " ++ show (B.unpack k) ++ " and v = " ++ show (B.unpack v) ++ ".")
     updateVersionNoBlock
     currMemTable <- gets dbMemTable
