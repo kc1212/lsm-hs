@@ -69,11 +69,13 @@ prop_multiEntry (Positive n) = monadicIO $ do
                 return res
         assert (all isJust res)
 
-prop_size :: Positive Int -> Property
-prop_size (Positive n) = monadicIO $ do
+prop_memtableSize :: Positive Int -> Property
+prop_memtableSize (Positive n) = monadicIO $ do
     run $ myRemoveDir testDir
     forAllM (vector n) $ \xs -> do
-        res <- run $ withLSM basicOptions { memtableThreshold = 99999999999 } $ do -- This test will fail if threshold is met
+        -- memtable size is only relevant to memtable, so we prevent merging
+        -- by setting the memtableThreshold to a high value, otherwise the test fails
+        res <- run $ withLSM basicOptions { memtableThreshold = 99999999999 } $ do
                 mapM_ (uncurry add) xs
                 gets memTableSize
         let actualSize = sum (map (\(k, v) -> C.length k + C.length v) (uniqueLast xs))
@@ -122,6 +124,16 @@ prop_mergeBTree xs ys zs = monadicIO $ do
         -- TODO refactor to use generator rather than filtering
         badKeys = filter (\x -> notElem x keys && (not . C.null) x) zs
 
+prop_emptyValueException :: Property
+prop_emptyValueException = monadicIO $ do
+    run $ myRemoveDir testDir
+    run $ catchIOError
+            (withLSM basicOptions $ do
+                let key = C.pack "key"
+                let val = C.pack ""
+                add key val)
+            (\e -> unless (isUserError e) (ioError e))
+
 main = do
     quickCheck prop_mergeBTree
     quickCheck prop_createLSM
@@ -129,19 +141,7 @@ main = do
     quickCheck prop_multiEntry
     quickCheck prop_readingFromDisk
     quickCheck prop_smallThreshold
-    quickCheck prop_size
-    quickCheckWith stdArgs { maxSuccess = 1 } addEmptyValue
+    quickCheck prop_memtableSize
+    quickCheckWith stdArgs { maxSuccess = 1 } prop_emptyValueException
     -- quickCheck (prop_multiEntryAndSize (Positive 100))
-
-addEmptyValue :: Property
-addEmptyValue = monadicIO $ do
-    res <- run $ catchIOError (do 
-        myRemoveDir testDir
-        withLSM basicOptions $ do
-            let key = C.pack "key"
-            let val = C.pack ""
-            add key val
-            return False)
-        (return . isUserError)
-    assert res
 
