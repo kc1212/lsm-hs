@@ -3,7 +3,6 @@ module Database.LSM.Utils where
 
 import qualified BTree as BT
 import qualified Data.Map as Map
-import qualified Data.ByteString.Lazy as B
 import Pipes
 import System.FilePath ((</>))
 import System.IO (stderr, hPutStrLn)
@@ -55,11 +54,6 @@ throwIOBadValue string =
 throwIOBadKey :: String -> IO a
 throwIOBadKey string =
     throwIO $ userError ("Addition of an empty key is not allowed. " ++ string)
-
-isEmptyBS :: Bs -> Bool
-isEmptyBS bs
-    | B.length bs > 0 = False
-    | otherwise       = True
 
 randomVersion :: IO String
 randomVersion = tail . (++ extension) . show <$> (randomIO :: IO Int)

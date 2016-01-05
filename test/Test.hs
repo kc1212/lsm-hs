@@ -130,10 +130,13 @@ main = do
     quickCheck prop_mergeBTree
     quickCheck prop_createLSM
     quickCheck prop_singleEntry
-    quickCheck $ prop_multiEntry (Positive 2)
+
+    quickCheck prop_multiEntry
     quickCheck $ prop_multiEntry (Positive twoMB)
+
     quickCheck prop_memtableSize
     quickCheckWith stdArgs { maxSuccess = 1 } prop_emptyValueException
-    quickCheck $ prop_readingFromDisk (Positive 2)
+
+    quickCheck prop_readingFromDisk
     quickCheck $ prop_readingFromDisk (Positive twoMB)
 
