@@ -5,6 +5,7 @@ import Control.Monad (unless)
 import Control.Monad.State (gets)
 import Data.Maybe (isJust, isNothing)
 import Data.List (nubBy)
+import Data.Int (Int64)
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
 import Test.QuickCheck.Modifiers ( NonEmptyList(..) )
@@ -21,7 +22,7 @@ import Database.LSM.MemTable as MT
 import Database.LSM.Types
 
 instance Arbitrary C.ByteString where
-    arbitrary = C.pack <$> (suchThat arbitrary (\a -> not (null a)))
+    arbitrary = C.pack <$> suchThat arbitrary (not . null)
     shrink xs = C.pack <$> shrink (C.unpack xs)
 
 instance CoArbitrary C.ByteString where
@@ -58,15 +59,13 @@ prop_singleEntry (k, v) k2 = monadicIO $ do
             return (r1, r2)
     assert (res == (Just v, Nothing))
 
--- prop_multiEntryOneByOne
-prop_multiEntry :: Positive Int -> Property
-prop_multiEntry (Positive n) = monadicIO $ do
+prop_multiEntry :: Positive Int64 -> Positive Int -> Property
+prop_multiEntry (Positive t) (Positive n) = monadicIO $ do
     run $ myRemoveDir testDir
     forAllM (vector n) $ \xs -> do
-        res <- run $ withLSM basicOptions $ do
+        res <- run $ withLSM basicOptions { memtableThreshold = t} $ do
                 mapM_ (uncurry add) xs
-                res <- mapM (get . fst) xs
-                return res
+                mapM (get . fst) xs
         assert (all isJust res)
 
 prop_memtableSize :: Positive Int -> Property
@@ -83,23 +82,15 @@ prop_memtableSize (Positive n) = monadicIO $ do
         where
             uniqueLast = reverse . nubBy (\(x, _) (y, _) -> x == y) . reverse
 
-prop_readingFromDisk :: Positive Int -> Property
-prop_readingFromDisk (Positive n) = monadicIO $ do
+prop_readingFromDisk :: Positive Int64 -> Positive Int -> Property
+prop_readingFromDisk (Positive t) (Positive n) = monadicIO $ do
     run $ myRemoveDir testDir
     forAllM (vector n) $ \xs -> do
-        run $ withLSM basicOptions (mapM_ (uncurry add) xs)
-        res <- run $ withLSM basicOptions { createIfMissing = False
+        run $ withLSM basicOptions { memtableThreshold = t } (mapM_ (uncurry add) xs)
+        res <- run $ withLSM basicOptions { memtableThreshold = t
+                                          , createIfMissing = False
                                           , errorIfExists = False }
                              (mapM (get . fst) xs)
-        assert (all isJust res)
-
-prop_smallThreshold :: Positive Int -> Property
-prop_smallThreshold (Positive n) = monadicIO $ do
-    run $ myRemoveDir testDir
-    forAllM (vector n) $ \xs -> do
-        res <- run $ withLSM basicOptions { memtableThreshold = 10 } $ do
-                mapM_ (uncurry add) xs
-                mapM (get . fst) xs
         assert (all isJust res)
 
 prop_mergeBTree :: [(Bs,Bs)] -> [(Bs,Bs)] -> [Bs] -> Property
@@ -135,13 +126,14 @@ prop_emptyValueException = monadicIO $ do
             (\e -> unless (isUserError e) (ioError e))
 
 main = do
+    let twoMB = 2 * 1024 * 1024;
     quickCheck prop_mergeBTree
     quickCheck prop_createLSM
     quickCheck prop_singleEntry
-    quickCheck prop_multiEntry
-    quickCheck prop_readingFromDisk
-    quickCheck prop_smallThreshold
+    quickCheck $ prop_multiEntry (Positive 2)
+    quickCheck $ prop_multiEntry (Positive twoMB)
     quickCheck prop_memtableSize
     quickCheckWith stdArgs { maxSuccess = 1 } prop_emptyValueException
-    -- quickCheck (prop_multiEntryAndSize (Positive 100))
+    quickCheck $ prop_readingFromDisk (Positive 2)
+    quickCheck $ prop_readingFromDisk (Positive twoMB)
 
