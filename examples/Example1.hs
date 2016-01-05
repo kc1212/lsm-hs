@@ -1,5 +1,5 @@
 
-module Example where
+module Example1 where
 
 import qualified Data.ByteString.Lazy.Char8 as C
 import Control.Monad.Trans (liftIO)
