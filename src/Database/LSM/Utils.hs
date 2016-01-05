@@ -19,10 +19,10 @@ createFileIfMissing :: FilePath -> IO ()
 createFileIfMissing name = doesFileExist name >>= \e -> unless e (writeFile name "")
 
 fileNameCurrent :: FilePath -> FilePath
-fileNameCurrent d = d </> "CURRENT"
+fileNameCurrent = (</> "CURRENT")
 
 fileNameLock :: FilePath -> FilePath
-fileNameLock d = d </> "LOCK"
+fileNameLock = (</> "LOCK")
 
 createFile :: FilePath -> IO ()
 createFile name = do
