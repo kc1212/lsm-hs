@@ -21,7 +21,7 @@ import Database.LSM.MemTable as MT
 import Database.LSM.Types
 
 instance Arbitrary C.ByteString where
-    arbitrary = C.pack <$> (suchThat arbitrary (\a -> not (null a)))
+    arbitrary = C.pack <$> (suchThat arbitrary (not . null))
     shrink xs = C.pack <$> shrink (C.unpack xs)
 
 instance CoArbitrary C.ByteString where
