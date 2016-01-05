@@ -5,13 +5,12 @@ import Control.Monad (unless)
 import Control.Monad.State (gets)
 import Data.Maybe (isJust, isNothing)
 import Data.List (nubBy)
-import Data.Char (isDigit)
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
 import Test.QuickCheck.Modifiers ( NonEmptyList(..) )
 import System.Directory
 import System.FilePath ((</>))
-import System.IO.Error (catchIOError, isDoesNotExistError)
+import System.IO.Error (catchIOError, isDoesNotExistError, isUserError)
 import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Lazy.Char8 as C
 import qualified BTree as BT
@@ -131,12 +130,18 @@ main = do
     quickCheck prop_readingFromDisk
     quickCheck prop_smallThreshold
     quickCheck prop_size
+    quickCheckWith stdArgs { maxSuccess = 1 } addEmptyValue
     -- quickCheck (prop_multiEntryAndSize (Positive 100))
 
-addEmptyValue = do
-    myRemoveDir testDir
-    withLSM basicOptions $ do
-        let key = C.pack "key"
-        let val = C.pack ""
-        add key val
+addEmptyValue :: Property
+addEmptyValue = monadicIO $ do
+    res <- run $ catchIOError (do 
+        myRemoveDir testDir
+        withLSM basicOptions $ do
+            let key = C.pack "key"
+            let val = C.pack ""
+            add key val
+            return False)
+        (return . isUserError)
+    assert res
 
