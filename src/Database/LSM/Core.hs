@@ -32,10 +32,8 @@ withLSM opts action = do
     -- create directory and throw error if necessary
     let dir = dbName opts
     dirExist <- doesDirectoryExist dir
-    when (errorIfExists opts && dirExist)
-            (throwIOAlreadyExists dir)
-    when (createIfMissing opts)
-            (createDirectoryIfMissing False dir)
+    when (errorIfExists opts && dirExist) (throwIOAlreadyExists dir)
+    when (createIfMissing opts) (createDirectoryIfMissing False dir)
 
     -- create the LOCK file and begin do runLSM
     createFileIfMissing (fileNameLock dir)
@@ -99,7 +97,6 @@ add :: Bs -> Bs -> LSM ()
 add k v = do
     when (B.null k) (io $ throwIOBadKey "")
     when (B.null v) (io $ throwIOBadValue "")
-    io $ logStdErr ("LSM addition where k = " ++ show (B.unpack k) ++ " and v = " ++ show (B.unpack v) ++ ".")
     io $ logStdErr ("LSM addition where k = "
                     ++ show (B.unpack k) ++ " and v = "
                     ++ show (B.unpack v) ++ ".")
