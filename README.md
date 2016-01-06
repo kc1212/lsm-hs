@@ -55,7 +55,7 @@ Finally, I0 is the same as C0 except it is immutable.
                                                          ------------
 ```
 ### Write
-During a write, the database will first write the key value pair into both the log file (see [Recovery](#recovery)) and C0, this is quick because it only happens in memory.
+During a write, the database will first write the key value pair into both the log file (see [below](#transaction-log-files-and-recovery)) and C0, this is quick because it only happens in memory.
 Once the size of C0 reaches a certain threshold, for example 100 MB. C0 is copied to I0 and then C0 is emptied.
 A background thread starts and merges the content of I0 with C1, this produces and new C1 and is written to disk.
 The state of the database is updated to point to the new C1 after the write completes.
