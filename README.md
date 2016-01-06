@@ -73,7 +73,7 @@ If the database exists the program reads the `CURRENT` file and keeps the latest
 
 ### Transaction Log Files and Recovery
 The recovery feature is used for recovering data after experiencing power failure, errors or crashes.
-We accomplish this by writing new key-value pairs into a log file (e.g. `memtable.log`) on every write request.
+We accomplish this by writing new key-value pairs into a log file (`memtable.log` in our case) on every write request.
 When the threshold is reached, but before merging begins, we rename `memtable.log` to `imemtable.log`, `imemtable.log`, should be read only.
 In other words, `memtable.log` should be in sync with C0 (the memtable) and `imemtable.log` should be in sync with I0 (the immutable memtable).
 When merging completes, `imemtable.log` is deleted.
@@ -87,7 +87,8 @@ So we read `imemtable.log` and merge it with the current C1.
 `imemtable.log` is deleted upon completion.
 
 If `memtable.log` exists, that implies the database did not shut down correctly and data in C0 was not written to C1.
-In this case we do the same thing - read `memtable.log` and then merge it with C1.
+In this case we do the same thing - read `memtable.log`, merge it with C1 and finally delete `memtable.log`.
+
 `imemtable.log` file should be recovered first, because the recovery should be done in the order of transaction history.
 
 Note that the recovery is done in foreground, and must not modify any log files.
