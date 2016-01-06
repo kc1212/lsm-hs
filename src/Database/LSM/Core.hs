@@ -5,10 +5,9 @@ import qualified Data.Map as Map
 import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Lazy.Char8 as C
 import qualified BTree as BT
-import Data.Maybe (fromJust)
 import Data.Int (Int64)
 import System.Directory (doesDirectoryExist, doesFileExist, createDirectoryIfMissing)
-import System.FileLock (lockFile, unlockFile, SharedExclusive(..))
+import System.FileLock (withFileLock, SharedExclusive(..))
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar
 import Control.Monad
@@ -30,9 +29,20 @@ runLSM ops st (LSM a) = runStateT (runReaderT a ops) st
 
 withLSM :: DBOptions -> LSM a -> IO a
 withLSM opts action = do
-    mvar <- newEmptyMVar
-    let st = DBState MT.new MT.new 0 Nothing mvar False
-    res <- runLSM opts st (openLSM >> action >>= closeLSM)
+    -- create directory and throw error if necessary
+    let dir = dbName opts
+    dirExist <- doesDirectoryExist dir
+    when (errorIfExists opts && dirExist) (throwIOAlreadyExists dir)
+    when (createIfMissing opts) (createDirectoryIfMissing False dir)
+
+    -- create the LOCK file and begin do runLSM
+    createFileIfMissing (fileNameLock dir)
+    res <- withFileLock (fileNameLock dir) Exclusive
+        (\_ -> do
+            mvar <- newEmptyMVar
+            let st = DBState MT.new MT.new 0 mvar False
+            runLSM opts st (openLSM >> action >>= closeLSM)
+        )
     return $ fst res
 
 loadLSM :: LSM ()
@@ -63,30 +73,14 @@ initLSM = do
 
 openLSM :: LSM ()
 openLSM = do
-    opts <- ask
-    let dir = dbName opts
-
-    dirExist <- io $ doesDirectoryExist dir
-    io $ when (errorIfExists opts && dirExist)
-                (throwIOAlreadyExists dir)
-
-    io $ when (createIfMissing opts)
-                (createDirectoryIfMissing False dir)
-
-    -- create LOCK file, note lockFile blocks until the lock is available
-    io $ createFileIfMissing (fileNameLock dir)
-    flock <- io $ lockFile (fileNameLock dir) Exclusive
-    modify (\s -> s { dbFileLock = Just flock })
-
-    currExists <- io $ doesFileExist (fileNameCurrent dir)
+    currFile <- fileNameCurrent <$> asks dbName
+    currExists <- io $ doesFileExist currFile
     if currExists then loadLSM else initLSM
 
 closeLSM :: a -> LSM a
 closeLSM a = do
     io $ logStdErr "Closing LSM."
-    syncToDisk                              -- sync memtable with btree
-    flock <- fromJust <$> gets dbFileLock   -- the lock must be present
-    io $ unlockFile flock
+    syncToDisk
     return a
 
 get :: Bs -> LSM (Maybe Bs)
@@ -102,8 +96,10 @@ get k = do
 add :: Bs -> Bs -> LSM ()
 add k v = do
     when (B.null k) (io $ throwIOBadKey "")
-    when (B.null v) (io $ throwIOBadValue "") 
-    io $ logStdErr ("LSM addition where k = " ++ show (B.unpack k) ++ " and v = " ++ show (B.unpack v) ++ ".")
+    when (B.null v) (io $ throwIOBadValue "")
+    io $ logStdErr ("LSM addition where k = "
+                    ++ show (B.unpack k) ++ " and v = "
+                    ++ show (B.unpack v) ++ ".")
     updateVersionNoBlock
     currMemTable <- gets dbMemTable
     currMemTableSize <- gets memTableSize
@@ -115,10 +111,10 @@ add k v = do
                 })
     threshold <- asks memtableThreshold
     asyncWriteToDisk newSize threshold
-    io $ logStdErr ("LSM addition completed.")
-    
+    io $ logStdErr "LSM addition completed."
+
 asyncWriteToDisk :: Int64 -> Int64 -> LSM ()
-asyncWriteToDisk sz t = when (sz > t) $ do 
+asyncWriteToDisk sz t = when (sz > t) $ do
     updateVersionBlock -- wait for async process to finish before starting a new one
     io $ logStdErr ("Threshold reached (" ++ show sz ++ " > " ++ show t ++ ").")
     oldMemTable <- gets dbMemTable

@@ -3,7 +3,6 @@ module Database.LSM.Utils where
 
 import qualified BTree as BT
 import qualified Data.Map as Map
-import qualified Data.ByteString.Lazy as B
 import Pipes
 import System.FilePath ((</>))
 import System.IO (stderr, hPutStrLn)
