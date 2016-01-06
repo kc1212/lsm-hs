@@ -85,10 +85,13 @@ The recovery is performed when opening the database.
 If `imemtable.log` exists, that implies the merging process was interrupted and C1 is in a bad state.
 So we read `imemtable.log` and merge it with the current C1.
 `imemtable.log` is deleted upon completion.
+
 If `memtable.log` exists, that implies the database did not shut down correctly and data in C0 was not written to C1.
-In this case we do the same thing - read `memtable.log` and then mergeit with C1.
-The backup log files should be checked first, because the recovery should be done in the order of transaction history.
-Note that the recovery should be done in foreground, and must not modify any log files.
+In this case we do the same thing - read `memtable.log` and then merge it with C1.
+`imemtable.log` file should be recovered first, because the recovery should be done in the order of transaction history.
+
+Note that the recovery is done in foreground, and must not modify any log files.
+This is because we cannot modify `memtable.log` while recovery is in progress, if the recovery happens in the background the user is able to modify `memtable.log` by simply writing data to the database.
 If the recovery process crashes (due to an external factor), we should be able to open the database and perform the recovery again, the recovery should succeed if there are no further crashes.
 
 The log files has the following format.
