@@ -55,7 +55,7 @@ Finally, I0 is the same as C0 except it is immutable.
                                                          ------------
 ```
 ### Write
-During a write, the database will first write the key value pair into C0, this is quick because it only happens in memory.
+During a write, the database will first write the key value pair into both the log file (see [Recovery](#recovery)) and C0, this is quick because it only happens in memory.
 Once the size of C0 reaches a certain threshold, for example 100 MB. C0 is copied to I0 and then C0 is emptied.
 A background thread starts and merges the content of I0 with C1, this produces and new C1 and is written to disk.
 The state of the database is updated to point to the new C1 after the write completes.
@@ -71,7 +71,39 @@ Deleting a key/value pair is the same as writing an empty string. The merging pr
 The database name is the folder name. If the folder does not exist the program should create it and also create an empty C1 file as well as the `CURRENT` file.
 If the database exists the program reads the `CURRENT` file and keeps the latest C1 name in its state.
 
-### TODOs
-recovery, fast reads, skip list
+### Transaction Log Files and Recovery
+The recovery feature is used for recovering data after experiencing power failure, errors or crashes.
+We accomplish this by writing new key-value pairs into a log file (e.g. `memtable.log`) on every write request.
+When the threshold is reached, we copy `memtable.log` to `backup.log` for backup
+Backup log files should be read only.
+In other words, the log file records every action performed on the memtable, and `memtable.log` should be in sync with C0 and `backup.log` should be in sync with I0.
+When merging completes, the backup log file is deleted.
+
+We assume the Haskell write functions (and the underyling system calls) perform atomic writes.
+So the log files should always be in a consistent state.
+
+To recover from a crash, we first check whether there is a backup log file.
+If there is, that implies the merging process was interrupted and C1 is in a bad state.
+So we read `backup.log` and merge it with the current C1, then delete `backup.log` upon completion.
+If there is a `memtable.log`, then that implies the database did not shut down correctly and some data was left in C0, so we do the same for `memtable.log`.
+The backup log files should be checked first, because the recovery should be done in the order of transaction history.
+Note that the recovery should be done in foreground, and must not modify log files.
+If the recovery process crashes (due to an external factor), we should be able to open the database and perform the recovery again, the recovery should succeed if there are no crashes.
+
+The log files has the following format.
+It's a concatination of entries, where every entry contains the length of the data, the data itself, and the SHA256 checksum of the data.
+There should always be an even number of entries, i.e. key is followed by value.
+```
+log file - binary string of entries:
+[entry]
+
+entry - represents key or value:
+[length (64 bits)] + [data (length bits)] + [sha256 (256 bits)]
+
+```
+
+
+
+
 
 
