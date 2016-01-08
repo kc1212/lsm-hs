@@ -3,6 +3,7 @@ module Main where
 
 import Control.Monad (unless)
 import Control.Monad.State (gets)
+import Data.Either (isLeft)
 import Data.Maybe (isJust, isNothing)
 import Data.List (nubBy)
 import Data.Int (Int64)
@@ -20,6 +21,7 @@ import Database.LSM
 import Database.LSM.Utils
 import Database.LSM.MemTable as MT
 import Database.LSM.Types
+import Database.LSM.Recovery
 
 instance Arbitrary C.ByteString where
     arbitrary = C.pack <$> suchThat arbitrary (not . null)
@@ -125,11 +127,31 @@ prop_emptyValueException = monadicIO $ do
                 add key val)
             (\e -> unless (isUserError e) (ioError e))
 
+prop_recoveryParser :: Positive Int -> Property
+prop_recoveryParser (Positive n) = monadicIO $ do
+    run $ myRemoveDir testDir >> createDirectoryIfMissing False testDir
+    forAllM (vector n) $ \pairs -> do
+        run $ mapM_ (appendPairToFile logdir) pairs
+        res <- run $ if null pairs then return (Right []) else readPairsFromFile logdir
+        assert (Right pairs == res)
+        where logdir = testDir </> "prop_recoveryParser"
+
+prop_recoveryParserFailure :: Bs -> Property
+prop_recoveryParserFailure bs = monadicIO $ do
+    run $ myRemoveDir testDir >> createDirectoryIfMissing False testDir
+    run $ B.writeFile logdir bs -- write some random data
+    res <- run $ readPairsFromFile logdir
+    assert (isLeft res)
+    where logdir = testDir </> "prop_recoveryParser"
+
 main = do
     let twoMB = 2 * 1024 * 1024;
+
     quickCheck prop_mergeBTree
     quickCheck prop_createLSM
     quickCheck prop_singleEntry
+    quickCheck prop_recoveryParser
+    quickCheck prop_recoveryParserFailure
 
     quickCheck prop_multiEntry
     quickCheck $ prop_multiEntry (Positive twoMB)

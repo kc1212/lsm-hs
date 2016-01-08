@@ -1,22 +1,16 @@
 
 module Database.LSM.Recovery where
 
-import Control.Exception (Exception, throw)
 import Data.Binary (encode, decode)
 import qualified Data.ByteString.Lazy as B
 import Data.Int (Int64)
-import Data.Typeable (Typeable)
+import Crypto.Hash.SHA256 (hashlazy)
 
 import Database.LSM.Types
 
-data RecoveryException = ParsingException | ChecksumException | BadPairException
-    deriving (Show, Typeable)
-
-instance Exception RecoveryException
-
-lenSize, sha256Size :: Int64
+lenSize, hashSize :: Int64
 lenSize = 64 `div` 8
-sha256Size = 256 `div` 8
+hashSize = 256 `div` 8
 
 parseEntry :: Bs -> Maybe ((Bs, Bs), Bs)
 parseEntry bs
@@ -40,35 +34,37 @@ parseData (n, bs)
 
 parseCheckSum :: Bs -> Maybe (Bs, Bs)
 parseCheckSum bs
-    | B.length bs < sha256Size = Nothing
-    | otherwise                = Just (B.splitAt sha256Size bs)
+    | B.length bs < hashSize = Nothing
+    | otherwise              = Just (B.splitAt hashSize bs)
 
-parseEntries :: Bs -> [(Bs, Bs)]
+parseEntries :: Bs -> Either String [(Bs, Bs)]
 parseEntries bs
-    | B.null bs = []
+    | B.null bs = Right []
     | otherwise = case parseEntry bs of
-                    Just (e, rest) -> e : parseEntries rest
-                    _              -> throw ParsingException
+                    Just (e, rest) -> (e:) <$> parseEntries rest
+                    _              -> Left "Parsing failed, parseEntry returned Nothing."
 
-parsePairs :: [(Bs, Bs)] -> [(Bs, Bs)]
-parsePairs [] = []
-parsePairs [_] = throw BadPairException
+parsePairs :: [(Bs, Bs)] -> Either String [(Bs, Bs)]
+parsePairs [] = Right []
+parsePairs [_] = Left "Parsing failed, odd number of pairs."
 parsePairs ((x, xsum) : (y, ysum) : rest) =
-    if sha256sum x == xsum && sha256sum y == ysum
-        then (x, y) : parsePairs rest
-        else throw ChecksumException
+    if hashlazy2 x == xsum && hashlazy2 y == ysum
+        then ((x, y):) <$> parsePairs rest
+        else Left "Parsing failed, checksum did not match."
 
 createPair :: (Bs, Bs) -> Bs
 createPair (k, v) = createEntry k `B.append` createEntry v
-    where createEntry x = encode (B.length x) `B.append` x `B.append` sha256sum x
+    where createEntry x = encode (B.length x) `B.append` x `B.append` hashlazy2 x
 
 -- The B.appendFile function creates file if it does not exist.
 appendPairToFile :: FilePath -> (Bs, Bs) -> IO ()
 appendPairToFile fpath pair = B.appendFile fpath (createPair pair)
 
-readPairsFromFile :: FilePath -> IO [(Bs, Bs)]
-readPairsFromFile fpath = (parsePairs . parseEntries) <$> B.readFile fpath
+readPairsFromFile :: FilePath -> IO (Either String [(Bs, Bs)])
+readPairsFromFile fpath = do
+    bs <- B.readFile fpath
+    return $ parseEntries bs >>= parsePairs
 
--- temporary place holder
-sha256sum = undefined
+hashlazy2 :: Bs -> Bs
+hashlazy2 = B.fromStrict . hashlazy
 
