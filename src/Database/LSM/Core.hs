@@ -51,12 +51,12 @@ loadLSM = do
     dir <- asks dbName
     let currentFile = fileNameCurrent dir
     version <- io $ readFile currentFile
-    io $ logStdErr ("Loading existing LSM, version: " ++  version ++ ".")
+    lsmLog ("Loading existing LSM, version: " ++  version ++ ".")
     when (null version) (io $ throwIOFileEmpty (currentFile </> version))
 
     performRecovery (fileNameIMemtableLog dir)
     performRecovery (fileNameMemtableLog dir)
-    io $ logStdErr "Loading Completed."
+    lsmLog "Loading Completed."
 
 -- This function will throw an exception if anything goes wrong with the recovery process.
 -- Most likely this is due to corrupted log files.
@@ -73,12 +73,12 @@ performRecovery logfile = do
 
 initLSM :: LSM ()
 initLSM = do
-    io $ logStdErr "Initialising LSM."
+    lsmLog "Initialising LSM."
     opts <- ask
     let dir = dbName opts
     let currentFile = fileNameCurrent dir
     version <- io randomVersion
-    io $ logStdErr ("Initial version is: " ++ version)
+    lsmLog ("Initial version is: " ++ version)
     io $ BT.fromOrderedToFile
             (btreeOrder opts)
             (btreeSize opts)
@@ -86,7 +86,7 @@ initLSM = do
             (mapToProducer MT.new)
     io $ createFile currentFile
     writeVersion version
-    io $ logStdErr "Initialisation completed."
+    lsmLog "Initialisation completed."
     -- TODO write checksum of db
 
 openLSM :: LSM ()
@@ -97,7 +97,7 @@ openLSM = do
 
 closeLSM :: a -> LSM a
 closeLSM a = do
-    io $ logStdErr "Closing LSM."
+    lsmLog "Closing LSM."
     syncToDisk
     return a
 
@@ -115,14 +115,14 @@ add :: Bs -> Bs -> LSM ()
 add k v = do
     when (B.null k) (io $ throwIOBadKey "")
     when (B.null v) (io $ throwIOBadValue "")
-    io $ logStdErr ("LSM addition where k = "
+    lsmLog ("LSM addition where k = "
                     ++ show (B.unpack k) ++ " and v = "
                     ++ show (B.unpack v) ++ ".")
     updateVersionNoBlock
     currMemTable <- gets dbMemTable
     currMemTableSize <- gets memTableSize
     let newSize = computeNewSize currMemTable k v currMemTableSize
-    io $ logStdErr ("New size: " ++ show newSize)
+    lsmLog ("New size: " ++ show newSize)
 
     memtableLog <- fileNameMemtableLog <$> asks dbName
     io $ appendPairToFile memtableLog (k, v)
@@ -133,12 +133,12 @@ add k v = do
 
     threshold <- asks memtableThreshold
     asyncWriteToDisk newSize threshold
-    io $ logStdErr "LSM addition completed."
+    lsmLog "LSM addition completed."
 
 asyncWriteToDisk :: Int64 -> Int64 -> LSM ()
 asyncWriteToDisk sz t = when (sz > t) $ do
     updateVersionBlock -- wait for async process to finish before starting a new one
-    io $ logStdErr ("Threshold reached (" ++ show sz ++ " > " ++ show t ++ ").")
+    lsmLog ("Threshold reached (" ++ show sz ++ " > " ++ show t ++ ").")
 
     dir <- asks dbName
     io $ renameFile (fileNameMemtableLog dir) (fileNameIMemtableLog dir)
@@ -156,6 +156,7 @@ asyncWriteToDisk sz t = when (sz > t) $ do
     tree <- gets dbIMemTable >>= io . mapToTree order size
     mvar <- gets dbMVar
     modify (\s -> s { dbAsyncRunning = True })
+    lsmLog ("Background merging started, from " ++ oldVer ++ " to " ++ newVer ++ ".")
     _ <- io $ forkIO (mergeToDisk order name oldVer newVer tree >>= putMVar mvar)
     return ()
 
@@ -170,14 +171,12 @@ mergeToDisk order path oldVer newVer newTree = do
     let oldPath = path </> oldVer
     let newPath = path </> newVer
     oldTree <- openTree oldPath
-    io $ logStdErr ("Merging started, from " ++ oldPath ++ " to " ++ newPath ++ ".")
     merge order newPath oldTree newTree
-    io $ logStdErr "Merging finished."
     return newVer
 
 updateVersionNoBlock :: LSM ()
 updateVersionNoBlock = do
-    io $ logStdErr "Updating version - non blocking."
+    lsmLog "Updating version - non blocking."
     mvar <- gets dbMVar
     res <- io $ tryTakeMVar mvar
     case res of
@@ -186,7 +185,7 @@ updateVersionNoBlock = do
 
 updateVersionBlock :: LSM ()
 updateVersionBlock = do
-    io $ logStdErr "Updating version - blocking."
+    lsmLog "Updating version - blocking."
     running <- gets dbAsyncRunning
     when running $ do
         mvar <- gets dbMVar
@@ -196,7 +195,7 @@ updateVersionBlock = do
 
 syncToDisk :: LSM ()
 syncToDisk = do
-    io $ logStdErr "Syncing to disk."
+    lsmLog "Syncing to disk."
     updateVersionBlock
     -- immutable table should be redundant after version update
     order <- asks btreeOrder
@@ -204,7 +203,7 @@ syncToDisk = do
     name <- asks dbName
     oldVer <- readVersion
     newVer <- io randomVersion
-    io $ logStdErr ("Syncing to disk, new version: " ++ newVer)
+    lsmLog ("Syncing to disk, new version: " ++ newVer)
     tree <- gets dbMemTable >>= io . mapToTree order size
     ver <- io $ mergeToDisk order name oldVer newVer tree
     writeVersion ver

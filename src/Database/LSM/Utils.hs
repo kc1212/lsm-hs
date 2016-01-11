@@ -6,7 +6,7 @@ import qualified Data.Map as Map
 import Pipes
 import System.FilePath ((</>))
 import System.IO (stderr, hPutStrLn)
-import Control.Monad (unless, liftM)
+import Control.Monad (when, unless, liftM)
 import Control.Monad.Reader (asks)
 import Control.Exception (throwIO)
 import System.Directory (doesFileExist, renameFile)
@@ -76,7 +76,7 @@ readVersion = do
 
 writeVersion :: String -> LSM ()
 writeVersion ver = do
-    io $ logStdErr ("Writing version: " ++ ver ++ ".")
+    lsmLog ("Writing version: " ++ ver ++ ".")
     currPath <- fileNameCurrent <$> asks dbName
     currExists <- io $ doesFileExist currPath
 
@@ -87,7 +87,7 @@ writeVersion ver = do
     io $ writeFile currPath ver
 
     content <- io $ readFile currPath -- hack to do strict IO
-    io $ logStdErr ("Writing version finished: " ++ content ++ ".")
+    lsmLog ("Writing version finished: " ++ content ++ ".")
 
 nameAndVersion :: LSM FilePath
 nameAndVersion = do
@@ -106,6 +106,9 @@ firstJust p q =
 
 logStdErr :: String -> IO ()
 logStdErr = hPutStrLn stderr
+
+lsmLog :: String -> LSM ()
+lsmLog str = asks debugLog >>= \x -> when x (io $ logStdErr str)
 
 openTree :: FilePath -> IO (BT.LookupTree Bs Bs)
 openTree fpath = do

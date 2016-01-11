@@ -28,7 +28,6 @@ data DBState = DBState
     , memTableSize      :: Int64
     , dbMVar            :: MVar String
     , dbAsyncRunning    :: Bool
-    -- and other properties
     }
 
 data DBOptions = DBOptions
@@ -38,6 +37,7 @@ data DBOptions = DBOptions
     , btreeOrder        :: BT.Order
     , btreeSize         :: BT.Size
     , memtableThreshold :: Int64
+    , debugLog          :: Bool
     } deriving (Show)
 
 type MemTable = Map.Map Bs Bs
