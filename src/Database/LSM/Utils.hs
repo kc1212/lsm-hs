@@ -24,6 +24,12 @@ fileNameCurrent = (</> "CURRENT")
 fileNameLock :: FilePath -> FilePath
 fileNameLock = (</> "LOCK")
 
+fileNameMemtableLog :: FilePath -> FilePath
+fileNameMemtableLog = (</> "memtable.log")
+
+fileNameIMemtableLog :: FilePath -> FilePath
+fileNameIMemtableLog = (</> "imemtable.log")
+
 createFile :: FilePath -> IO ()
 createFile name = do
     exist <- doesFileExist name
@@ -54,6 +60,10 @@ throwIOBadValue string =
 throwIOBadKey :: String -> IO a
 throwIOBadKey string =
     throwIO $ userError ("Addition of an empty key is not allowed. " ++ string)
+
+throwIORecoveryFailure :: String -> IO a
+throwIORecoveryFailure string =
+    throwIO $ userError ("Recovery failed - " ++ string)
 
 randomVersion :: IO String
 randomVersion = tail . (++ extension) . show <$> (randomIO :: IO Int)

@@ -1,5 +1,8 @@
 
-module Database.LSM.Recovery where
+module Database.LSM.Recovery
+    ( appendPairToFile
+    , readPairsFromFile
+    ) where
 
 import Data.Binary (encode, decode)
 import qualified Data.ByteString.Lazy as B

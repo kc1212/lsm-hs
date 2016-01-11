@@ -6,7 +6,7 @@ import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Lazy.Char8 as C
 import qualified BTree as BT
 import Data.Int (Int64)
-import System.Directory (doesDirectoryExist, doesFileExist, createDirectoryIfMissing)
+import System.Directory (doesDirectoryExist, doesFileExist, createDirectoryIfMissing, renameFile)
 import System.FileLock (withFileLock, SharedExclusive(..))
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar
@@ -17,11 +17,12 @@ import System.FilePath ((</>))
 
 import Database.LSM.Utils
 import Database.LSM.Types
+import Database.LSM.Recovery
 import qualified Database.LSM.MemTable as MT
 
 -- default options
 def :: DBOptions
-def = DBOptions "mydb" True True 10 1000 twoMB
+def = DBOptions "mydb" True True 10 1000 twoMB False
         where twoMB = 2 * 1024 * 1024
 
 runLSM :: DBOptions -> DBState -> LSM a -> IO (a, DBState)
@@ -47,11 +48,28 @@ withLSM opts action = do
 
 loadLSM :: LSM ()
 loadLSM = do
-    currentFile <- fileNameCurrent <$> asks dbName
+    dir <- asks dbName
+    let currentFile = fileNameCurrent dir
     version <- io $ readFile currentFile
     io $ logStdErr ("Loading existing LSM, version: " ++  version ++ ".")
     when (null version) (io $ throwIOFileEmpty (currentFile </> version))
+
+    performRecovery (fileNameIMemtableLog dir)
+    performRecovery (fileNameMemtableLog dir)
     io $ logStdErr "Loading Completed."
+
+-- This function will throw an exception if anything goes wrong with the recovery process.
+-- Most likely this is due to corrupted log files.
+-- The user must manually delete the log files if they wish to open the database again.
+-- TODO a better way is supply a database option, e.g. errorOnFailedRecovery
+performRecovery :: FilePath -> LSM ()
+performRecovery logfile = do
+    exist <- io $ doesFileExist logfile
+    when exist $ do
+            epairs <- io $ readPairsFromFile logfile
+            case epairs of
+                Left m      -> io $ throwIORecoveryFailure m
+                Right pairs -> mapM_ (uncurry add) pairs
 
 initLSM :: LSM ()
 initLSM = do
@@ -103,12 +121,16 @@ add k v = do
     updateVersionNoBlock
     currMemTable <- gets dbMemTable
     currMemTableSize <- gets memTableSize
-    let newSize = computeNewSize currMemTable k v currMemTableSize 
+    let newSize = computeNewSize currMemTable k v currMemTableSize
     io $ logStdErr ("New size: " ++ show newSize)
+
+    memtableLog <- fileNameMemtableLog <$> asks dbName
+    io $ appendPairToFile memtableLog (k, v)
     modify (\s -> s
                 { dbMemTable = Map.insert k v currMemTable
                 , memTableSize = newSize
                 })
+
     threshold <- asks memtableThreshold
     asyncWriteToDisk newSize threshold
     io $ logStdErr "LSM addition completed."
@@ -117,10 +139,15 @@ asyncWriteToDisk :: Int64 -> Int64 -> LSM ()
 asyncWriteToDisk sz t = when (sz > t) $ do
     updateVersionBlock -- wait for async process to finish before starting a new one
     io $ logStdErr ("Threshold reached (" ++ show sz ++ " > " ++ show t ++ ").")
+
+    dir <- asks dbName
+    io $ renameFile (fileNameMemtableLog dir) (fileNameIMemtableLog dir)
+
     oldMemTable <- gets dbMemTable
     modify (\s -> s { dbIMemTable = oldMemTable
                     , dbMemTable = MT.new
                     , memTableSize = 0 })
+
     order <- asks btreeOrder
     size <- asks btreeSize
     name <- asks dbName
