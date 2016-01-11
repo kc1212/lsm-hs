@@ -3,8 +3,9 @@ module Main where
 
 import Control.Monad (unless)
 import Control.Monad.State (gets)
+import Control.Exception (throwIO)
 import Data.Either (isLeft)
-import Data.Maybe (isJust, isNothing)
+import Data.Maybe (isJust, isNothing, fromJust)
 import Data.List (nubBy)
 import Data.Int (Int64)
 import Test.QuickCheck
@@ -20,7 +21,6 @@ import qualified BTree as BT
 import Database.LSM
 import Database.LSM.Utils
 import Database.LSM.MemTable as MT
-import Database.LSM.Types
 import Database.LSM.Recovery
 
 instance Arbitrary C.ByteString where
@@ -37,12 +37,12 @@ myRemoveDir dir =
 
 emptyAction = return ()
 testDir = "/tmp/tmpdb"
-basicOptions = def { dbName = testDir }
+basicOptions = def { dbName = testDir, debugLog = False }
 
 prop_createLSM :: Property
 prop_createLSM = monadicIO $ do
     run $ myRemoveDir testDir
-    res <- run $ withLSM basicOptions emptyAction
+    run $ withLSM basicOptions emptyAction
     let dir = dbName basicOptions
     dirExist <- run $ doesDirectoryExist dir
     assert dirExist
@@ -69,6 +69,7 @@ prop_multiEntry (Positive t) (Positive n) = monadicIO $ do
                 mapM_ (uncurry add) xs
                 mapM (get . fst) xs
         assert (all isJust res)
+        logFileShouldNotExist testDir
 
 prop_memtableSize :: Positive Int -> Property
 prop_memtableSize (Positive n) = monadicIO $ do
@@ -89,11 +90,13 @@ prop_readingFromDisk (Positive t) (Positive n) = monadicIO $ do
     run $ myRemoveDir testDir
     forAllM (vector n) $ \xs -> do
         run $ withLSM basicOptions { memtableThreshold = t } (mapM_ (uncurry add) xs)
+        logFileShouldNotExist testDir
         res <- run $ withLSM basicOptions { memtableThreshold = t
                                           , createIfMissing = False
                                           , errorIfExists = False }
                              (mapM (get . fst) xs)
         assert (all isJust res)
+        logFileShouldNotExist testDir
 
 prop_mergeBTree :: [(Bs,Bs)] -> [(Bs,Bs)] -> [Bs] -> Property
 prop_mergeBTree xs ys zs = monadicIO $ do
@@ -144,14 +147,38 @@ prop_recoveryParserFailure bs = monadicIO $ do
     assert (isLeft res)
     where logdir = testDir </> "prop_recoveryParser"
 
+prop_recovery :: Positive Int64 -> Positive Int -> Property
+prop_recovery (Positive t) (Positive n) = monadicIO $ do
+    run $ myRemoveDir testDir
+    forAllM (vector n) $ \pairs -> do
+        run $ catchIOError
+                (withLSM basicOptions { memtableThreshold = t } $ do
+                    mapM_ (uncurry add) pairs
+                    io $ throwIO $ userError "")
+                (\e -> unless (isUserError e) (ioError e))
+        mExist <- run $ doesFileExist (testDir </> "memtable.log")
+        iExist <- run $ doesFileExist (testDir </> "imemtable.log")
+        assert (mExist || iExist)
+        res <- run $ withLSM basicOptions { createIfMissing = False, errorIfExists = False }
+                             (mapM (get . fst) pairs)
+        assert (map fromJust res == map snd pairs)
+
+logFileShouldNotExist :: FilePath -> PropertyM IO ()
+logFileShouldNotExist path = do
+        run (doesFileExist (path </> "memtable.log")) >>= assert . not
+        run (doesFileExist (path </> "imemtable.log")) >>= assert . not
+
 main = do
     let twoMB = 2 * 1024 * 1024;
 
     quickCheck prop_mergeBTree
     quickCheck prop_createLSM
     quickCheck prop_singleEntry
+
     quickCheck prop_recoveryParser
     quickCheck prop_recoveryParserFailure
+    quickCheck prop_recovery
+    quickCheck $ prop_recovery (Positive twoMB)
 
     quickCheck prop_multiEntry
     quickCheck $ prop_multiEntry (Positive twoMB)

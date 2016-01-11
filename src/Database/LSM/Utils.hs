@@ -9,7 +9,7 @@ import System.IO (stderr, hPutStrLn)
 import Control.Monad (when, unless, liftM)
 import Control.Monad.Reader (asks)
 import Control.Exception (throwIO)
-import System.Directory (doesFileExist, renameFile)
+import System.Directory (doesFileExist, renameFile, removeFile)
 import System.IO.Error (alreadyExistsErrorType, doesNotExistErrorType, mkIOError)
 import System.Random (randomIO)
 
@@ -17,6 +17,9 @@ import Database.LSM.Types
 
 createFileIfMissing :: FilePath -> IO ()
 createFileIfMissing name = doesFileExist name >>= \e -> unless e (writeFile name "")
+
+removeFileIfExist :: FilePath -> IO ()
+removeFileIfExist f = doesFileExist f >>= \e -> when e (removeFile f)
 
 fileNameCurrent :: FilePath -> FilePath
 fileNameCurrent = (</> "CURRENT")
@@ -44,6 +47,8 @@ throwIOAlreadyExists name =
 throwIODoesNotExist :: String -> IO a
 throwIODoesNotExist name =
     throwIO $ mkIOError doesNotExistErrorType "" Nothing (Just name)
+
+-- TODO instead of using userError, we should make our own error types
 
 throwIOFileEmpty :: String -> IO a
 throwIOFileEmpty name =

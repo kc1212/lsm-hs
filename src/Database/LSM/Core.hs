@@ -6,7 +6,7 @@ import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Lazy.Char8 as C
 import qualified BTree as BT
 import Data.Int (Int64)
-import System.Directory (doesDirectoryExist, doesFileExist, createDirectoryIfMissing, renameFile)
+import System.Directory (doesDirectoryExist, doesFileExist, createDirectoryIfMissing, renameFile, removeFile)
 import System.FileLock (withFileLock, SharedExclusive(..))
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar
@@ -68,8 +68,11 @@ performRecovery logfile = do
     when exist $ do
             epairs <- io $ readPairsFromFile logfile
             case epairs of
-                Left m      -> io $ throwIORecoveryFailure m
-                Right pairs -> mapM_ (uncurry add) pairs
+                Left  m     -> io $ throwIORecoveryFailure m
+                Right pairs -> recover pairs
+    where recover pairs = do
+            newVer <- lsmMapToTree (Map.fromList pairs) >>= lsmMergeToDisk
+            io $ removeFile logfile
 
 initLSM :: LSM ()
 initLSM = do
@@ -148,16 +151,15 @@ asyncWriteToDisk sz t = when (sz > t) $ do
                     , dbMemTable = MT.new
                     , memTableSize = 0 })
 
+    -- TODO this is a bit ugly, can't use lsmMergeToDisk inside forkIO
     order <- asks btreeOrder
-    size <- asks btreeSize
-    name <- asks dbName
     oldVer <- readVersion
     newVer <- io randomVersion
-    tree <- gets dbIMemTable >>= io . mapToTree order size
+    tree <- gets dbIMemTable >>= lsmMapToTree
     mvar <- gets dbMVar
     modify (\s -> s { dbAsyncRunning = True })
     lsmLog ("Background merging started, from " ++ oldVer ++ " to " ++ newVer ++ ".")
-    _ <- io $ forkIO (mergeToDisk order name oldVer newVer tree >>= putMVar mvar)
+    _ <- io $ forkIO (mergeToDisk order dir oldVer newVer tree >>= putMVar mvar)
     return ()
 
 update :: Bs -> Bs -> LSM ()
@@ -166,6 +168,9 @@ update k v = add k v
 delete :: Bs -> LSM ()
 delete k = add k (C.pack "")
 
+-- NOTE: mergeToDisk does not update the version number!
+-- If merging in the foreground, use lsmMergeToDisk instead,
+-- otherwise remember to update the version number upon completion.
 mergeToDisk :: BT.Order -> FilePath -> String -> String -> BT.LookupTree Bs Bs -> IO String
 mergeToDisk order path oldVer newVer newTree = do
     let oldPath = path </> oldVer
@@ -196,21 +201,34 @@ updateVersionBlock = do
 syncToDisk :: LSM ()
 syncToDisk = do
     lsmLog "Syncing to disk."
-    updateVersionBlock
-    -- immutable table should be redundant after version update
-    order <- asks btreeOrder
-    size <- asks btreeSize
-    name <- asks dbName
-    oldVer <- readVersion
-    newVer <- io randomVersion
-    lsmLog ("Syncing to disk, new version: " ++ newVer)
-    tree <- gets dbMemTable >>= io . mapToTree order size
-    ver <- io $ mergeToDisk order name oldVer newVer tree
-    writeVersion ver
+    updateVersionBlock -- immutable table should be redundant after version update
+    tree <- gets dbMemTable >>= lsmMapToTree
+    ver <- lsmMergeToDisk tree
+
+    -- no need of log files after memtables are all written to btree
+    fileNameIMemtableLog <$> asks dbName >>= io . removeFileIfExist
+    fileNameMemtableLog <$> asks dbName >>= io . removeFileIfExist
 
 computeNewSize :: MemTable -> Bs -> Bs -> Int64 -> Int64
 computeNewSize memTable k v oldSize = oldSize + entrySize - correction k (MT.lookup k memTable)
     where correction _ Nothing = 0
           correction x (Just y) = B.length x + B.length y
           entrySize = fromIntegral (B.length k + B.length v)
+
+lsmMergeToDisk :: BT.LookupTree Bs Bs -> LSM FilePath
+lsmMergeToDisk tree = do
+    order <- asks btreeOrder
+    dir <- asks dbName
+    oldVer <- readVersion
+    newVer <- io randomVersion
+    res <- io $ mergeToDisk order dir oldVer newVer tree
+    writeVersion newVer
+    return res
+
+lsmMapToTree :: ImmutableTable -> LSM (BT.LookupTree Bs Bs)
+lsmMapToTree table = do
+    order <- asks btreeOrder
+    size <- asks btreeSize
+    io $ mapToTree order size table
+
 
