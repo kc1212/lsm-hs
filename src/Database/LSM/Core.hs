@@ -71,7 +71,7 @@ performRecovery logfile = do
                 Left  m     -> io $ throwIORecoveryFailure m
                 Right pairs -> recover pairs
     where recover pairs = do
-            newVer <- lsmMapToTree (Map.fromList pairs) >>= lsmMergeToDisk
+            _ <- lsmMapToTree (Map.fromList pairs) >>= lsmMergeToDisk
             io $ removeFile logfile
 
 initLSM :: LSM ()
@@ -203,7 +203,7 @@ syncToDisk = do
     lsmLog "Syncing to disk."
     updateVersionBlock -- immutable table should be redundant after version update
     tree <- gets dbMemTable >>= lsmMapToTree
-    ver <- lsmMergeToDisk tree
+    _ <- lsmMergeToDisk tree
 
     -- no need of log files after memtables are all written to btree
     fileNameIMemtableLog <$> asks dbName >>= io . removeFileIfExist
