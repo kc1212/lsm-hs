@@ -6,7 +6,7 @@ import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Lazy.Char8 as C
 import qualified BTree as BT
 import Data.Int (Int64)
-import System.Directory (doesDirectoryExist, doesFileExist, createDirectoryIfMissing)
+import System.Directory (doesDirectoryExist, doesFileExist, createDirectoryIfMissing, renameFile, removeFile)
 import System.FileLock (withFileLock, SharedExclusive(..))
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar
@@ -17,11 +17,12 @@ import System.FilePath ((</>))
 
 import Database.LSM.Utils
 import Database.LSM.Types
+import Database.LSM.Recovery
 import qualified Database.LSM.MemTable as MT
 
 -- default options
 def :: DBOptions
-def = DBOptions "mydb" True True 10 1000 twoMB
+def = DBOptions "mydb" True True 10 1000 twoMB False
         where twoMB = 2 * 1024 * 1024
 
 runLSM :: DBOptions -> DBState -> LSM a -> IO (a, DBState)
@@ -47,20 +48,40 @@ withLSM opts action = do
 
 loadLSM :: LSM ()
 loadLSM = do
-    currentFile <- fileNameCurrent <$> asks dbName
+    dir <- asks dbName
+    let currentFile = fileNameCurrent dir
     version <- io $ readFile currentFile
-    io $ logStdErr ("Loading existing LSM, version: " ++  version ++ ".")
+    lsmLog ("Loading existing LSM, version: " ++  version ++ ".")
     when (null version) (io $ throwIOFileEmpty (currentFile </> version))
-    io $ logStdErr "Loading Completed."
+
+    performRecovery (fileNameIMemtableLog dir)
+    performRecovery (fileNameMemtableLog dir)
+    lsmLog "Loading Completed."
+
+-- This function will throw an exception if anything goes wrong with the recovery process.
+-- Most likely this is due to corrupted log files.
+-- The user must manually delete the log files if they wish to open the database again.
+-- TODO a better way is supply a database option, e.g. errorOnFailedRecovery
+performRecovery :: FilePath -> LSM ()
+performRecovery logfile = do
+    exist <- io $ doesFileExist logfile
+    when exist $ do
+            epairs <- io $ readPairsFromFile logfile
+            case epairs of
+                Left  m     -> io $ throwIORecoveryFailure m
+                Right pairs -> recover pairs
+    where recover pairs = do
+            _ <- lsmMapToTree (Map.fromList pairs) >>= lsmMergeToDisk
+            io $ removeFile logfile
 
 initLSM :: LSM ()
 initLSM = do
-    io $ logStdErr "Initialising LSM."
+    lsmLog "Initialising LSM."
     opts <- ask
     let dir = dbName opts
     let currentFile = fileNameCurrent dir
     version <- io randomVersion
-    io $ logStdErr ("Initial version is: " ++ version)
+    lsmLog ("Initial version is: " ++ version)
     io $ BT.fromOrderedToFile
             (btreeOrder opts)
             (btreeSize opts)
@@ -68,7 +89,7 @@ initLSM = do
             (mapToProducer MT.new)
     io $ createFile currentFile
     writeVersion version
-    io $ logStdErr "Initialisation completed."
+    lsmLog "Initialisation completed."
     -- TODO write checksum of db
 
 openLSM :: LSM ()
@@ -79,7 +100,7 @@ openLSM = do
 
 closeLSM :: a -> LSM a
 closeLSM a = do
-    io $ logStdErr "Closing LSM."
+    lsmLog "Closing LSM."
     syncToDisk
     return a
 
@@ -97,39 +118,48 @@ add :: Bs -> Bs -> LSM ()
 add k v = do
     when (B.null k) (io $ throwIOBadKey "")
     when (B.null v) (io $ throwIOBadValue "")
-    io $ logStdErr ("LSM addition where k = "
+    lsmLog ("LSM addition where k = "
                     ++ show (B.unpack k) ++ " and v = "
                     ++ show (B.unpack v) ++ ".")
     updateVersionNoBlock
     currMemTable <- gets dbMemTable
     currMemTableSize <- gets memTableSize
-    let newSize = computeNewSize currMemTable k v currMemTableSize 
-    io $ logStdErr ("New size: " ++ show newSize)
+    let newSize = computeNewSize currMemTable k v currMemTableSize
+    lsmLog ("New size: " ++ show newSize)
+
+    memtableLog <- fileNameMemtableLog <$> asks dbName
+    io $ appendPairToFile memtableLog (k, v)
     modify (\s -> s
                 { dbMemTable = Map.insert k v currMemTable
                 , memTableSize = newSize
                 })
+
     threshold <- asks memtableThreshold
     asyncWriteToDisk newSize threshold
-    io $ logStdErr "LSM addition completed."
+    lsmLog "LSM addition completed."
 
 asyncWriteToDisk :: Int64 -> Int64 -> LSM ()
 asyncWriteToDisk sz t = when (sz > t) $ do
     updateVersionBlock -- wait for async process to finish before starting a new one
-    io $ logStdErr ("Threshold reached (" ++ show sz ++ " > " ++ show t ++ ").")
+    lsmLog ("Threshold reached (" ++ show sz ++ " > " ++ show t ++ ").")
+
+    dir <- asks dbName
+    io $ renameFile (fileNameMemtableLog dir) (fileNameIMemtableLog dir)
+
     oldMemTable <- gets dbMemTable
     modify (\s -> s { dbIMemTable = oldMemTable
                     , dbMemTable = MT.new
                     , memTableSize = 0 })
+
+    -- TODO this is a bit ugly, can't use lsmMergeToDisk inside forkIO
     order <- asks btreeOrder
-    size <- asks btreeSize
-    name <- asks dbName
     oldVer <- readVersion
     newVer <- io randomVersion
-    tree <- gets dbIMemTable >>= io . mapToTree order size
+    tree <- gets dbIMemTable >>= lsmMapToTree
     mvar <- gets dbMVar
     modify (\s -> s { dbAsyncRunning = True })
-    _ <- io $ forkIO (mergeToDisk order name oldVer newVer tree >>= putMVar mvar)
+    lsmLog ("Background merging started, from " ++ oldVer ++ " to " ++ newVer ++ ".")
+    _ <- io $ forkIO (mergeToDisk order dir oldVer newVer tree >>= putMVar mvar)
     return ()
 
 update :: Bs -> Bs -> LSM ()
@@ -138,19 +168,20 @@ update k v = add k v
 delete :: Bs -> LSM ()
 delete k = add k (C.pack "")
 
+-- NOTE: mergeToDisk does not update the version number!
+-- If merging in the foreground, use lsmMergeToDisk instead,
+-- otherwise remember to update the version number upon completion.
 mergeToDisk :: BT.Order -> FilePath -> String -> String -> BT.LookupTree Bs Bs -> IO String
 mergeToDisk order path oldVer newVer newTree = do
     let oldPath = path </> oldVer
     let newPath = path </> newVer
     oldTree <- openTree oldPath
-    io $ logStdErr ("Merging started, from " ++ oldPath ++ " to " ++ newPath ++ ".")
     merge order newPath oldTree newTree
-    io $ logStdErr "Merging finished."
     return newVer
 
 updateVersionNoBlock :: LSM ()
 updateVersionNoBlock = do
-    io $ logStdErr "Updating version - non blocking."
+    lsmLog "Updating version - non blocking."
     mvar <- gets dbMVar
     res <- io $ tryTakeMVar mvar
     case res of
@@ -159,7 +190,7 @@ updateVersionNoBlock = do
 
 updateVersionBlock :: LSM ()
 updateVersionBlock = do
-    io $ logStdErr "Updating version - blocking."
+    lsmLog "Updating version - blocking."
     running <- gets dbAsyncRunning
     when running $ do
         mvar <- gets dbMVar
@@ -169,22 +200,35 @@ updateVersionBlock = do
 
 syncToDisk :: LSM ()
 syncToDisk = do
-    io $ logStdErr "Syncing to disk."
-    updateVersionBlock
-    -- immutable table should be redundant after version update
-    order <- asks btreeOrder
-    size <- asks btreeSize
-    name <- asks dbName
-    oldVer <- readVersion
-    newVer <- io randomVersion
-    io $ logStdErr ("Syncing to disk, new version: " ++ newVer)
-    tree <- gets dbMemTable >>= io . mapToTree order size
-    ver <- io $ mergeToDisk order name oldVer newVer tree
-    writeVersion ver
+    lsmLog "Syncing to disk."
+    updateVersionBlock -- immutable table should be redundant after version update
+    tree <- gets dbMemTable >>= lsmMapToTree
+    _ <- lsmMergeToDisk tree
+
+    -- no need of log files after memtables are all written to btree
+    fileNameIMemtableLog <$> asks dbName >>= io . removeFileIfExist
+    fileNameMemtableLog <$> asks dbName >>= io . removeFileIfExist
 
 computeNewSize :: MemTable -> Bs -> Bs -> Int64 -> Int64
 computeNewSize memTable k v oldSize = oldSize + entrySize - correction k (MT.lookup k memTable)
     where correction _ Nothing = 0
           correction x (Just y) = B.length x + B.length y
           entrySize = fromIntegral (B.length k + B.length v)
+
+lsmMergeToDisk :: BT.LookupTree Bs Bs -> LSM FilePath
+lsmMergeToDisk tree = do
+    order <- asks btreeOrder
+    dir <- asks dbName
+    oldVer <- readVersion
+    newVer <- io randomVersion
+    res <- io $ mergeToDisk order dir oldVer newVer tree
+    writeVersion newVer
+    return res
+
+lsmMapToTree :: ImmutableTable -> LSM (BT.LookupTree Bs Bs)
+lsmMapToTree table = do
+    order <- asks btreeOrder
+    size <- asks btreeSize
+    io $ mapToTree order size table
+
 

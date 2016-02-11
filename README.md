@@ -27,7 +27,7 @@ stack build
 stack repl
 
 # to run the tests
-stack test 2> lsm.log
+stack test
 ```
 
 ## Examples
