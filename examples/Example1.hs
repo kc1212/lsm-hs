@@ -19,8 +19,8 @@ main = do
         res1 <- get key1
         update key1 val2
         res2 <- get key1
-        -- delete key1 -- TODO this failed because we're adding an empty value
-        res3 <- get key1
+        delete key1
+        res3 <- get key1 -- TODO this should return Nothing
         liftIO $ print (fromJust res1)
         liftIO $ print (fromJust res2)
         liftIO $ print (fromJust res3)
