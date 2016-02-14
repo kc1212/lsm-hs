@@ -118,10 +118,10 @@ add :: Bs -> Bs -> LSM ()
 add k v = do
     when (B.null k) (io $ throwIOBadKey "")
     when (B.null v) (io $ throwIOBadValue "")
-    add' k v
+    addWithNull k v
 
-add' :: Bs -> Bs -> LSM ()
-add' k v = do
+addWithNull :: Bs -> Bs -> LSM ()
+addWithNull k v = do
     lsmLog ("LSM addition where k = "
                     ++ show (B.unpack k) ++ " and v = "
                     ++ show (B.unpack v) ++ ".")
@@ -170,7 +170,7 @@ update :: Bs -> Bs -> LSM ()
 update = add
 
 delete :: Bs -> LSM ()
-delete k = add' k (C.pack "")
+delete k = addWithNull k (C.pack "")
 
 -- NOTE: mergeToDisk does not update the version number!
 -- If merging in the foreground, use lsmMergeToDisk instead,
