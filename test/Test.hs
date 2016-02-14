@@ -130,6 +130,14 @@ prop_emptyValueException = monadicIO $ do
                 add key val)
             (\e -> unless (isUserError e) (ioError e))
 
+prop_getNonExistingKey :: Property
+prop_getNonExistingKey = monadicIO $ do
+    run $ myRemoveDir testDir
+    res <- run $ withLSM basicOptions $ do
+        let key = C.pack "key"
+        get key
+    assert (res == Nothing)
+
 prop_recoveryParser :: Positive Int -> Property
 prop_recoveryParser (Positive n) = monadicIO $ do
     run $ myRemoveDir testDir >> createDirectoryIfMissing False testDir
@@ -185,6 +193,7 @@ main = do
 
     quickCheck prop_memtableSize
     quickCheckWith stdArgs { maxSuccess = 1 } prop_emptyValueException
+    quickCheckWith stdArgs { maxSuccess = 1 } prop_getNonExistingKey
 
     quickCheck prop_readingFromDisk
     quickCheck $ prop_readingFromDisk (Positive twoMB)
