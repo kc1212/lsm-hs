@@ -120,8 +120,8 @@ prop_mergeBTree xs ys zs = monadicIO $ do
         -- TODO refactor to use generator rather than filtering
         badKeys = filter (\x -> notElem x keys && (not . C.null) x) zs
 
-prop_emptyValueException :: Property
-prop_emptyValueException = monadicIO $ do
+prop_addEmptyValueException :: Property
+prop_addEmptyValueException = monadicIO $ do
     run $ myRemoveDir testDir
     run $ catchIOError
             (withLSM basicOptions $ do
@@ -184,7 +184,7 @@ main = do
     quickCheck $ prop_multiEntry (Positive twoMB)
 
     quickCheck prop_memtableSize
-    quickCheckWith stdArgs { maxSuccess = 1 } prop_emptyValueException
+    quickCheckWith stdArgs { maxSuccess = 1 } prop_addEmptyValueException
 
     quickCheck prop_readingFromDisk
     quickCheck $ prop_readingFromDisk (Positive twoMB)
