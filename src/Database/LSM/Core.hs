@@ -173,10 +173,15 @@ delete k = addWithExistenceCheck k (C.pack "") addWithoutNullCheck
 
 addWithExistenceCheck :: Bs -> Bs -> (Bs -> Bs -> LSM ()) -> LSM ()
 addWithExistenceCheck k v f = do
-    x <- get k
-    case x of
-        Nothing -> return ()
-        Just _ -> f k v
+    exist <- doesKeyExist k
+    when (exist) $ f k v
+
+doesKeyExist :: Bs -> LSM Bool
+doesKeyExist k =
+    get k >>=
+    \x -> case x of
+        Just _  -> return True
+        Nothing -> return False
 
 -- NOTE: mergeToDisk does not update the version number!
 -- If merging in the foreground, use lsmMergeToDisk instead,
