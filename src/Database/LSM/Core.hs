@@ -112,7 +112,11 @@ get k = do
     mv3 <- nameAndVersion
             >>= io . openTree
             >>= (\t -> return $ BT.lookup t k)
-    return $ mv1 `firstJust` mv2 `firstJust` mv3
+    return $ checkForEmpty (mv1 `firstJust` mv2 `firstJust` mv3)
+    where checkForEmpty (Just v) = if B.null v
+                                   then Nothing
+                                   else Just v
+          checkForEmpty Nothing = Nothing
 
 add :: Bs -> Bs -> LSM ()
 add k v = do
