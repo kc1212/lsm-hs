@@ -22,7 +22,7 @@ import qualified Database.LSM.MemTable as MT
 
 -- default options
 def :: DBOptions
-def = DBOptions "mydb" True True 10 1000 twoMB False
+def = DBOptions "mydb" True True 10 1000 twoMB True
         where twoMB = 2 * 1024 * 1024
 
 runLSM :: DBOptions -> DBState -> LSM a -> IO (a, DBState)
@@ -120,12 +120,11 @@ get k = do
 
 add :: Bs -> Bs -> LSM ()
 add k v = do
-    when (B.null k) (io $ throwIOBadKey "")
-    when (B.null v) (io $ throwIOBadValue "")
-    addWithNull k v
+    checkKeyValuePair k v
+    addWithoutNullCheck k v
 
-addWithNull :: Bs -> Bs -> LSM ()
-addWithNull k v = do
+addWithoutNullCheck :: Bs -> Bs -> LSM ()
+addWithoutNullCheck k v = do
     lsmLog ("LSM addition where k = "
                     ++ show (B.unpack k) ++ " and v = "
                     ++ show (B.unpack v) ++ ".")
@@ -171,10 +170,21 @@ asyncWriteToDisk sz t = when (sz > t) $ do
     return ()
 
 update :: Bs -> Bs -> LSM ()
-update = add
+update k v = do
+    exist <- doesKeyExist k
+    when (exist) $ add k v
 
 delete :: Bs -> LSM ()
-delete k = addWithNull k (C.pack "")
+delete k = do
+    exist <- doesKeyExist k
+    when (exist) $ addWithoutNullCheck k (C.pack "")
+
+doesKeyExist :: Bs -> LSM Bool
+doesKeyExist k =
+    get k >>=
+    \x -> case x of
+        Just _  -> return True
+        Nothing -> return False
 
 -- NOTE: mergeToDisk does not update the version number!
 -- If merging in the foreground, use lsmMergeToDisk instead,
@@ -239,4 +249,8 @@ lsmMapToTree table = do
     size <- asks btreeSize
     io $ mapToTree order size table
 
-
+checkKeyValuePair :: Bs -> Bs -> LSM ()
+checkKeyValuePair k v = do
+    when (B.null k) (io $ throwIOBadKey "")
+    when (B.null v) (io $ throwIOBadValue "")
+ 
