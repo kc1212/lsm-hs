@@ -130,12 +130,11 @@ prop_emptyValueException = monadicIO $ do
                 add key val)
             (\e -> unless (isUserError e) (ioError e))
 
-prop_getNonExistingKey :: Property
-prop_getNonExistingKey = monadicIO $ do
+prop_getNonExistingKey :: Bs -> Property
+prop_getNonExistingKey k = monadicIO $ do
     run $ myRemoveDir testDir
     res <- run $ withLSM basicOptions $ do
-        let key = C.pack "key"
-        get key
+        get k
     assert (res == Nothing)
 
 prop_recoveryParser :: Positive Int -> Property
