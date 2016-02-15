@@ -112,7 +112,11 @@ get k = do
     mv3 <- nameAndVersion
             >>= io . openTree
             >>= (\t -> return $ BT.lookup t k)
-    return $ mv1 `firstJust` mv2 `firstJust` mv3
+    return $ checkForEmpty (mv1 `firstJust` mv2 `firstJust` mv3)
+    where checkForEmpty (Just v) = if B.null v
+                                   then Nothing
+                                   else Just v
+          checkForEmpty Nothing = Nothing
 
 add :: Bs -> Bs -> LSM ()
 add k v = do
@@ -166,15 +170,14 @@ asyncWriteToDisk sz t = when (sz > t) $ do
     return ()
 
 update :: Bs -> Bs -> LSM ()
-update k v = addWithExistenceCheck k v add
+update k v = do
+    exist <- doesKeyExist k
+    when (exist) $ add k v
 
 delete :: Bs -> LSM ()
-delete k = addWithExistenceCheck k (C.pack "") addWithoutNullCheck
-
-addWithExistenceCheck :: Bs -> Bs -> (Bs -> Bs -> LSM ()) -> LSM ()
-addWithExistenceCheck k v f = do
+delete k = do
     exist <- doesKeyExist k
-    when (exist) $ f k v
+    when (exist) $ addWithoutNullCheck k (C.pack "")
 
 doesKeyExist :: Bs -> LSM Bool
 doesKeyExist k =
