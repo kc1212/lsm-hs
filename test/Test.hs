@@ -10,7 +10,6 @@ import Data.List (nubBy)
 import Data.Int (Int64)
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
-import Test.QuickCheck.Modifiers ( NonEmptyList(..) )
 import System.Directory
 import System.FilePath ((</>))
 import System.IO.Error (catchIOError, isDoesNotExistError, isUserError)
@@ -133,9 +132,8 @@ prop_addEmptyValueException = monadicIO $ do
 prop_getNonExistingKey :: Bs -> Property
 prop_getNonExistingKey k = monadicIO $ do
     run $ myRemoveDir testDir
-    res <- run $ withLSM basicOptions $ do
-        get k
-    assert (res == Nothing)
+    res <- run $ withLSM basicOptions (get k)
+    assert (isNothing res)
 
 prop_delete :: Positive Int -> Property
 prop_delete (Positive n) = monadicIO $ do

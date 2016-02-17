@@ -43,7 +43,5 @@ data DBOptions = DBOptions
 type MemTable = Map.Map Bs Bs
 type ImmutableTable = MemTable
 
-type InternalKey = Int -- dummy
-
 type Bs = B.ByteString
 

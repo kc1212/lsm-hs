@@ -22,9 +22,10 @@ import qualified Database.LSM.MemTable as MT
 
 -- default options
 def :: DBOptions
-def = DBOptions "mydb" True True 10 1000 twoMB True
+def = DBOptions "mydb" True True 10 1000 twoMB False
         where twoMB = 2 * 1024 * 1024
 
+-- unwrap
 runLSM :: DBOptions -> DBState -> LSM a -> IO (a, DBState)
 runLSM ops st (LSM a) = runStateT (runReaderT a ops) st
 
@@ -172,12 +173,12 @@ asyncWriteToDisk sz t = when (sz > t) $ do
 update :: Bs -> Bs -> LSM ()
 update k v = do
     exist <- doesKeyExist k
-    when (exist) $ add k v
+    when exist $ add k v
 
 delete :: Bs -> LSM ()
 delete k = do
     exist <- doesKeyExist k
-    when (exist) $ addWithoutNullCheck k (C.pack "")
+    when exist $ addWithoutNullCheck k (C.pack "")
 
 doesKeyExist :: Bs -> LSM Bool
 doesKeyExist k =

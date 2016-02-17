@@ -20,10 +20,10 @@ main = do
         update key1 val2
         res2 <- get key1
         delete key1
-        res3 <- get key1 -- TODO this should return Nothing
+        res3 <- get key1
         liftIO $ print (fromJust res1)
         liftIO $ print (fromJust res2)
-        liftIO $ print (fromJust res3)
+        liftIO $ print res3
 
     -- write large value
     withLSM def { dbName = "/tmp/ExampleDB_Large"
