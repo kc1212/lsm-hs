@@ -29,15 +29,6 @@ instance Arbitrary C.ByteString where
 instance CoArbitrary C.ByteString where
     coarbitrary = coarbitrary . C.unpack
 
-myRemoveDir dir =
-    catchIOError
-    (removeDirectoryRecursive dir)
-    (\e -> unless (isDoesNotExistError e) (ioError e))
-
-emptyAction = return ()
-testDir = "/tmp/tmpdb"
-basicOptions = def { dbName = testDir, debugLog = False }
-
 prop_createLSM :: Property
 prop_createLSM = monadicIO $ do
     run $ myRemoveDir testDir
@@ -81,8 +72,6 @@ prop_memtableSize (Positive n) = monadicIO $ do
                 gets memTableSize
         let actualSize = sum (map (\(k, v) -> C.length k + C.length v) (uniqueLast xs))
         assert (res == actualSize)
-        where
-            uniqueLast = reverse . nubBy (\(x, _) (y, _) -> x == y) . reverse
 
 prop_readingFromDisk :: Positive Int64 -> Positive Int -> Property
 prop_readingFromDisk (Positive t) (Positive n) = monadicIO $ do
@@ -144,9 +133,10 @@ prop_delete (Positive n) = monadicIO $ do
                 mapM_ (uncurry add) xs          -- add everything
                 mapM_ (delete . fst) xa         -- delete half of it - xa
                 resa <- mapM (get . fst) xa     -- should be all Nothing
-                resb <- mapM (get . fst) xb     -- should be all Just something
+                resb <- mapM (get . fst) xb     -- some of it should be Just something
                 return (resa, resb)
         assert (all isNothing resa)
+        assert (any isJust resb)
         logFileShouldNotExist testDir
 
 prop_recoveryParser :: Positive Int -> Property
@@ -180,13 +170,35 @@ prop_recovery (Positive t) (Positive n) = monadicIO $ do
         assert (mExist || iExist)
         res <- run $ withLSM basicOptions { createIfMissing = False, errorIfExists = False }
                              (mapM (get . fst) pairs)
-        assert (map fromJust res == map snd pairs)
+        assert (map fromJust res == map snd (uniqueLast pairs))
+
+
+-- helper functions
+emptyAction :: LSM ()
+emptyAction = return ()
+
+testDir :: FilePath
+testDir = "/tmp/tmpdb"
+
+basicOptions :: DBOptions
+basicOptions = def { dbName = testDir, debugLog = False }
 
 logFileShouldNotExist :: FilePath -> PropertyM IO ()
 logFileShouldNotExist path = do
         run (doesFileExist (path </> "memtable.log")) >>= assert . not
         run (doesFileExist (path </> "imemtable.log")) >>= assert . not
 
+uniqueLast :: Eq a => [(a, t)] -> [(a, t)]
+uniqueLast = reverse . nubBy (\(x, _) (y, _) -> x == y) . reverse
+
+myRemoveDir :: FilePath -> IO ()
+myRemoveDir dir =
+    catchIOError
+    (removeDirectoryRecursive dir)
+    (\e -> unless (isDoesNotExistError e) (ioError e))
+
+
+main :: IO ()
 main = do
     let twoMB = 2 * 1024 * 1024;
 
@@ -207,6 +219,7 @@ main = do
     quickCheckWith stdArgs { maxSuccess = 1 } prop_getNonExistingKey
 
     quickCheck $ prop_delete (Positive 2)
+    quickCheck $ prop_delete (Positive 10)
 
     quickCheck prop_readingFromDisk
     quickCheck $ prop_readingFromDisk (Positive twoMB)

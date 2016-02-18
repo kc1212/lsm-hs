@@ -205,7 +205,7 @@ updateVersionNoBlock = do
     res <- io $ tryTakeMVar mvar
     case res of
         Nothing -> return ()
-        Just v  -> writeVersion v >> modify (\s -> s { dbAsyncRunning = False })
+        Just v  -> updateVersion v >> modify (\s -> s { dbAsyncRunning = False })
 
 updateVersionBlock :: LSM ()
 updateVersionBlock = do
@@ -214,8 +214,7 @@ updateVersionBlock = do
     when running $ do
         mvar <- gets dbMVar
         v <- io $ takeMVar mvar -- blocks
-        writeVersion v
-        modify (\s -> s { dbAsyncRunning = False })
+        updateVersion v >> modify (\s -> s { dbAsyncRunning = False })
 
 syncToDisk :: LSM ()
 syncToDisk = do
@@ -241,7 +240,7 @@ lsmMergeToDisk tree = do
     oldVer <- readVersion
     newVer <- io randomVersion
     res <- io $ mergeToDisk order dir oldVer newVer tree
-    writeVersion newVer
+    updateVersion newVer
     return res
 
 lsmMapToTree :: ImmutableTable -> LSM (BT.LookupTree Bs Bs)
@@ -254,4 +253,4 @@ checkKeyValuePair :: Bs -> Bs -> LSM ()
 checkKeyValuePair k v = do
     when (B.null k) (io $ throwIOBadKey "")
     when (B.null v) (io $ throwIOBadValue "")
- 
+

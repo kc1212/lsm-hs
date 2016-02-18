@@ -15,6 +15,7 @@ import System.Random (randomIO)
 
 import Database.LSM.Types
 
+-- File handling functions
 createFileIfMissing :: FilePath -> IO ()
 createFileIfMissing name = doesFileExist name >>= \e -> unless e (writeFile name "")
 
@@ -40,6 +41,8 @@ createFile name = do
         then throwIOAlreadyExists name
         else writeFile name ""
 
+
+-- Exception functions
 throwIOAlreadyExists :: String -> IO a
 throwIOAlreadyExists name =
     throwIO $ mkIOError alreadyExistsErrorType "" Nothing (Just name)
@@ -70,6 +73,8 @@ throwIORecoveryFailure :: String -> IO a
 throwIORecoveryFailure string =
     throwIO $ userError ("Recovery failed - " ++ string)
 
+
+-- LSM Version functions
 randomVersion :: IO String
 randomVersion = tail . (++ extension) . show <$> (randomIO :: IO Int)
     where extension = "lsm.db"
@@ -100,21 +105,23 @@ nameAndVersion = do
     version <- readVersion
     return (path </> version)
 
-io :: MonadIO m => IO a -> m a
-io = liftIO
+-- this function updates the version, it also deletes the old database (.lsm) file
+updateVersion :: String -> LSM ()
+updateVersion ver = do
+    oldVerPath <- nameAndVersion
+    writeVersion ver
+    io $ removeFile oldVerPath -- oldVerPath should always exist
 
-firstJust :: Maybe a -> Maybe a -> Maybe a
-firstJust p q =
-    case p of
-        Just _  -> p
-        _       -> q
 
+-- Logging functions
 logStdErr :: String -> IO ()
 logStdErr = hPutStrLn stderr
 
 lsmLog :: String -> LSM ()
 lsmLog str = asks debugLog >>= \x -> when x (io $ logStdErr str)
 
+
+-- BTree functions
 openTree :: FilePath -> IO (BT.LookupTree Bs Bs)
 openTree fpath = do
     eTree <- BT.open fpath
@@ -137,4 +144,15 @@ mapToTree order size = producerToTree order size . mapToProducer
 
 merge :: BT.Order -> FilePath -> BT.LookupTree Bs Bs -> BT.LookupTree Bs Bs -> IO ()
 merge order fpath t1 t2 = BT.mergeTrees (\a _ -> return a) order fpath [t1, t2]
+
+
+-- Generic helpers
+io :: MonadIO m => IO a -> m a
+io = liftIO
+
+firstJust :: Maybe a -> Maybe a -> Maybe a
+firstJust p q =
+    case p of
+        Just _  -> p
+        _       -> q
 
